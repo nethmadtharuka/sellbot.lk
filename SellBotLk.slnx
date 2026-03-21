@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="SellBotLk.Api/SellBotLk.Api.csproj" />
+  <Project Path="SellBotLk.Tests/SellBotLk.Tests.csproj" />
+</Solution>
