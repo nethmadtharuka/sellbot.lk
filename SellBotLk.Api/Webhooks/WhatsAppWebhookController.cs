@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using SellBotLk.Api.Models.DTOs;
 using SellBotLk.Api.Services;
-using System.Text.Json;
 
 namespace SellBotLk.Api.Webhooks;
 
@@ -11,22 +10,21 @@ public class WhatsAppWebhookController : ControllerBase
 {
     private readonly IConfiguration _config;
     private readonly WhatsAppSendService _whatsAppSendService;
+    private readonly MessageProcessingService _messageProcessingService;
     private readonly ILogger<WhatsAppWebhookController> _logger;
 
     public WhatsAppWebhookController(
         IConfiguration config,
         WhatsAppSendService whatsAppSendService,
+        MessageProcessingService messageProcessingService,
         ILogger<WhatsAppWebhookController> logger)
     {
         _config = config;
         _whatsAppSendService = whatsAppSendService;
+        _messageProcessingService = messageProcessingService;
         _logger = logger;
     }
 
-    /// <summary>
-    /// Meta webhook verification — called once when registering the webhook URL.
-    /// Returns hub.challenge if the verify token matches.
-    /// </summary>
     [HttpGet("whatsapp")]
     public IActionResult Verify(
         [FromQuery(Name = "hub.mode")] string mode,
@@ -45,10 +43,6 @@ public class WhatsAppWebhookController : ControllerBase
         return Unauthorized();
     }
 
-    /// <summary>
-    /// Receives all incoming WhatsApp messages and events.
-    /// HMAC signature is verified by HmacVerificationMiddleware before reaching here.
-    /// </summary>
     [HttpPost("whatsapp")]
     public async Task<IActionResult> Receive([FromBody] WhatsAppIncomingDto payload)
     {
@@ -84,7 +78,7 @@ public class WhatsAppWebhookController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error processing webhook payload");
-            return Ok(); // Always return 200 to Meta — never 500
+            return Ok();
         }
     }
 
@@ -95,14 +89,8 @@ public class WhatsAppWebhookController : ControllerBase
         {
             case "text":
                 var text = message.Text?.Body ?? "";
-                _logger.LogInformation("Text message: {Text}", text);
-
-                // Sprint 3 will route this to GeminiService for intent detection
-                // For now, echo back so we can verify the full flow works
-                await _whatsAppSendService.SendTextMessageAsync(
-                    message.From,
-                    $"Hi {senderName}! SellBot.lk received your message: \"{text}\". " +
-                    $"Full AI processing coming soon!");
+                await _messageProcessingService.ProcessTextMessageAsync(
+                    message.From, text, senderName);
                 break;
 
             case "image":
@@ -130,7 +118,8 @@ public class WhatsAppWebhookController : ControllerBase
                 break;
 
             default:
-                _logger.LogInformation("Unhandled message type: {Type}", message.Type);
+                _logger.LogInformation("Unhandled message type: {Type}",
+                    message.Type);
                 break;
         }
     }
