@@ -482,7 +482,9 @@ $RECYCLE.BIN/
 *.swp
 "" 
 "# Secrets" 
-".env" 
-"*.env" 
-"appsettings.Production.json" 
-"appsettings.Staging.json" 
+# Secrets
+.env
+*.env
+appsettings.Development.json
+appsettings.Production.json
+appsettings.Staging.json
