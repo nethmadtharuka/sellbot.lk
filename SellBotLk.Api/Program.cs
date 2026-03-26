@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using SellBotLk.Api.Data;
+using SellBotLk.Api.Integrations.Gemini;
 using SellBotLk.Api.Middleware;
 using SellBotLk.Api.Services;
 
@@ -9,8 +11,14 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
 
+// Services
 builder.Services.AddHttpClient<WhatsAppSendService>();
+builder.Services.AddHttpClient<GeminiService>();
 builder.Services.AddScoped<WhatsAppSendService>();
+builder.Services.AddScoped<GeminiService>();
+builder.Services.AddScoped<MessageProcessingService>();
+builder.Services.AddMemoryCache();
+
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
