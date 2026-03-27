@@ -3,9 +3,8 @@ using SellBotLk.Api.Integrations.Gemini;
 using SellBotLk.Api.Models.DTOs;
 using SellBotLk.Api.Models.Entities;
 using Microsoft.EntityFrameworkCore;
-
 namespace SellBotLk.Api.Services;
-
+using SellBotLk.Api.Models;
 public class MessageProcessingService
 {
     private readonly GeminiService _geminiService;
@@ -15,6 +14,7 @@ public class MessageProcessingService
     private readonly OrderService _orderService;
     private readonly AppDbContext _db;
     private readonly ILogger<MessageProcessingService> _logger;
+    private readonly NegotiationService _negotiationService;
 
     public MessageProcessingService(
         GeminiService geminiService,
@@ -23,6 +23,8 @@ public class MessageProcessingService
         VisualSearchService visualSearchService,
         OrderService orderService,
         AppDbContext db,
+        NegotiationService negotiationService,
+
         ILogger<MessageProcessingService> logger)
     {
         _geminiService = geminiService;
@@ -32,7 +34,118 @@ public class MessageProcessingService
         _orderService = orderService;
         _db = db;
         _logger = logger;
+        _negotiationService = negotiationService;
+
     }
+    // 💰 NEGOTIATION HANDLER
+private async Task HandleNegotiationAsync(
+    string fromPhone,
+    ParsedMessageIntent parsed,
+    int customerId,
+    string language)
+{
+    // Check if there's an active negotiation context first
+    var existingContext = await _negotiationService.GetNegotiationContextAsync(customerId);
+
+    // Customer replied "confirm" to accept a counteroffer
+    if (existingContext != null &&
+        parsed.Intent == "PriceNegotiation" &&
+        (parsed.ReplyMessage?.Contains("confirm",
+            StringComparison.OrdinalIgnoreCase) == true ||
+         parsed.OfferedPrice == existingContext.CounterOffer))
+    {
+        // Place the order at the negotiated price
+        var createDto = new CreateOrderDto
+        {
+            CustomerId = customerId,
+            Items = new List<OrderItemDto>
+            {
+                new()
+                {
+                    ProductId = existingContext.ProductId,
+                    Quantity = existingContext.Quantity,
+                    NegotiatedPrice = existingContext.CounterOffer
+                }
+            }
+        };
+
+        var order = await _orderService.CreateOrderAsync(createDto);
+        var confirmMsg = _orderService.FormatOrderConfirmationMessage(order);
+
+        await _negotiationService.ClearNegotiationContextAsync(customerId);
+        await _whatsAppSendService.SendTextMessageAsync(fromPhone, confirmMsg);
+        return;
+    }
+
+    // Fresh negotiation — need product and offered price
+    var productId = parsed.ProductId;
+    var offeredPrice = parsed.OfferedPrice;
+    var quantity = parsed.OrderItems?.FirstOrDefault()?.Quantity ?? 1;
+
+    // If no product ID, try to match from order items
+    if (productId == null && parsed.OrderItems?.Any() == true)
+    {
+        var allProducts = await _productService.GetAllAsync();
+        var match = allProducts.FirstOrDefault(p =>
+            p.Name.Contains(parsed.OrderItems[0].ProductName,
+                StringComparison.OrdinalIgnoreCase));
+        productId = match?.Id;
+    }
+
+    if (productId == null || offeredPrice == null)
+    {
+        await _whatsAppSendService.SendTextMessageAsync(fromPhone,
+            "Which product would you like to negotiate on, " +
+            "and what price are you offering? " +
+            "Example: 'Can I get the leather chair for LKR 25,000?'");
+        return;
+    }
+
+    var result = await _negotiationService.EvaluateOfferAsync(
+        productId.Value, quantity, offeredPrice.Value, language);
+
+    // Save context for multi-turn if counteroffer
+    if (result.Outcome == NegotiationOutcome.CounterOffer)
+    {
+        var product = await _productService.GetByIdAsync(productId.Value);
+        await _negotiationService.SaveNegotiationContextAsync(customerId,
+            new NegotiationContext
+            {
+                ProductId = productId.Value,
+                ProductName = product?.Name ?? "",
+                Quantity = quantity,
+                OriginalPrice = product?.Price ?? 0,
+                MinPrice = product?.MinPrice ?? 0,
+                CustomerLastOffer = offeredPrice,
+                CounterOffer = result.CounterOfferPrice,
+                RoundsRemaining = 2
+            });
+    }
+    else if (result.Outcome == NegotiationOutcome.Accepted)
+    {
+        // Create order immediately at accepted price
+        var createDto = new CreateOrderDto
+        {
+            CustomerId = customerId,
+            Items = new List<OrderItemDto>
+            {
+                new()
+                {
+                    ProductId = productId.Value,
+                    Quantity = quantity,
+                    NegotiatedPrice = result.AcceptedPrice
+                }
+            }
+        };
+
+        await _orderService.CreateOrderAsync(createDto);
+        await _negotiationService.ClearNegotiationContextAsync(customerId);
+    }
+
+    await _whatsAppSendService.SendTextMessageAsync(fromPhone, result.Message);
+}
+
+
 
     // ✉️ HANDLE TEXT MESSAGES
     public async Task ProcessTextMessageAsync(
@@ -83,6 +196,11 @@ public class MessageProcessingService
                 await HandleOrderAsync(
                     fromPhone, parsed, customer.Id, parsed.Language);
                 break;
+
+                case "PriceNegotiation":
+                await HandleNegotiationAsync(
+        fromPhone, parsed, customer.Id, parsed.Language);
+    break;
 
             default:
                 await _whatsAppSendService.SendTextMessageAsync(

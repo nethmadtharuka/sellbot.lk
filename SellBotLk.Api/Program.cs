@@ -32,6 +32,7 @@ builder.Services.AddScoped<MediaDownloadService>();
 builder.Services.AddScoped<OrderRepository>();
 builder.Services.AddScoped<OrderNumberGenerator>();
 builder.Services.AddScoped<OrderService>();
+builder.Services.AddScoped<NegotiationService>();
 
 var app = builder.Build();
 
