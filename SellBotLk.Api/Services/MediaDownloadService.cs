@@ -73,4 +73,17 @@ public class MediaDownloadService
 
         return (bytes, mimeType);
     }
+     public static bool IsAcceptedType(string? mimeType)
+    {
+        if (string.IsNullOrEmpty(mimeType)) return false;
+
+        var accepted = new[]
+        {
+            "image/jpeg", "image/jpg", "image/png", "image/webp",
+            "application/pdf"
+        };
+
+        return accepted.Contains(mimeType.ToLower());
+    }
+
 }
