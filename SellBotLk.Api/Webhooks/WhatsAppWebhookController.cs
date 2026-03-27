@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using SellBotLk.Api.Data;
 using SellBotLk.Api.Models.DTOs;
+using SellBotLk.Api.Models.Entities;
 using SellBotLk.Api.Services;
-using System.Text.Json;
 
 namespace SellBotLk.Api.Webhooks;
 
@@ -12,23 +14,33 @@ public class WhatsAppWebhookController : ControllerBase
     private readonly IConfiguration _config;
     private readonly WhatsAppSendService _whatsAppSendService;
     private readonly MessageProcessingService _messageProcessingService;
+    private readonly DocumentService _documentService;
     private readonly MediaDownloadService _mediaDownloadService;
+    private readonly AppDbContext _context;
     private readonly ILogger<WhatsAppWebhookController> _logger;
 
     public WhatsAppWebhookController(
         IConfiguration config,
         WhatsAppSendService whatsAppSendService,
         MessageProcessingService messageProcessingService,
+        DocumentService documentService,
         MediaDownloadService mediaDownloadService,
+        AppDbContext context,
         ILogger<WhatsAppWebhookController> logger)
     {
         _config = config;
         _whatsAppSendService = whatsAppSendService;
         _messageProcessingService = messageProcessingService;
+        _documentService = documentService;
         _mediaDownloadService = mediaDownloadService;
+        _context = context;
         _logger = logger;
     }
 
+    /// <summary>
+    /// Meta webhook verification — called once when registering the webhook URL.
+    /// Returns hub.challenge if the verify token matches.
+    /// </summary>
     [HttpGet("whatsapp")]
     public IActionResult Verify(
         [FromQuery(Name = "hub.mode")] string mode,
@@ -47,6 +59,10 @@ public class WhatsAppWebhookController : ControllerBase
         return Unauthorized();
     }
 
+    /// <summary>
+    /// Receives all incoming WhatsApp messages and events.
+    /// HMAC signature verified by HmacVerificationMiddleware before reaching here.
+    /// </summary>
     [HttpPost("whatsapp")]
     public async Task<IActionResult> Receive([FromBody] WhatsAppIncomingDto payload)
     {
@@ -82,7 +98,7 @@ public class WhatsAppWebhookController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error processing webhook payload");
-            return Ok();
+            return Ok(); // Always return 200 to Meta — never let Meta retry
         }
     }
 
@@ -92,13 +108,44 @@ public class WhatsAppWebhookController : ControllerBase
         switch (message.Type)
         {
             case "text":
-                var text = message.Text?.Body ?? "";
                 await _messageProcessingService.ProcessTextMessageAsync(
-                    message.From, text, senderName);
+                    message.From,
+                    message.Text?.Body ?? "",
+                    senderName);
                 break;
 
             case "image":
-                await HandleImageMessageAsync(message, senderName);
+                var imageMediaId = message.Image?.Id;
+                if (!string.IsNullOrEmpty(imageMediaId))
+                {
+                    await _whatsAppSendService.SendTextMessageAsync(
+                        message.From,
+                        "📄 Processing your image... please wait.");
+
+                    var (imgBytes, imgMime) = await _mediaDownloadService
+                        .DownloadMediaAsync(imageMediaId);
+
+                    if (imgBytes.Length > 0)
+                    {
+                        var customer = await GetCustomerByPhoneAsync(message.From);
+
+                        // Images from customers treated as payment slips by default.
+                        // Sprint 10 will add AI-based document type detection.
+                        await _documentService.ProcessDocumentAsync(
+                            imgBytes,
+                            imgMime,
+                            DocumentType.PaymentSlip,
+                            customer?.Id,
+                            message.From);
+                    }
+                    else
+                    {
+                        await _whatsAppSendService.SendTextMessageAsync(
+                            message.From,
+                            "Sorry, I couldn't download your image. " +
+                            "Please try sending it again.");
+                    }
+                }
                 break;
 
             case "audio":
@@ -110,11 +157,37 @@ public class WhatsAppWebhookController : ControllerBase
                 break;
 
             case "document":
-                _logger.LogInformation("Document received — Media ID: {Id}",
-                    message.Document?.Id);
-                await _whatsAppSendService.SendTextMessageAsync(
-                    message.From,
-                    "Document received! Invoice processing coming in Sprint 9.");
+                var docMediaId = message.Document?.Id;
+                if (!string.IsNullOrEmpty(docMediaId))
+                {
+                    await _whatsAppSendService.SendTextMessageAsync(
+                        message.From,
+                        "📄 Processing your document... please wait.");
+
+                    var (docBytes, docMime) = await _mediaDownloadService
+                        .DownloadMediaAsync(docMediaId);
+
+                    if (docBytes.Length > 0)
+                    {
+                        var customer = await GetCustomerByPhoneAsync(message.From);
+
+                        // PDFs treated as supplier invoices by default.
+                        // Owner can reprocess with correct type from dashboard.
+                        await _documentService.ProcessDocumentAsync(
+                            docBytes,
+                            docMime,
+                            DocumentType.SupplierInvoice,
+                            customer?.Id,
+                            message.From);
+                    }
+                    else
+                    {
+                        await _whatsAppSendService.SendTextMessageAsync(
+                            message.From,
+                            "Sorry, I couldn't download your document. " +
+                            "Please try again.");
+                    }
+                }
                 break;
 
             default:
@@ -124,57 +197,11 @@ public class WhatsAppWebhookController : ControllerBase
         }
     }
 
-    // 🖼️ IMAGE MESSAGE HANDLER
-    private async Task HandleImageMessageAsync(
-        WhatsAppMessageItemDto message, string senderName)
+    private async Task<Customer?> GetCustomerByPhoneAsync(string phone)
     {
-        var mediaId = message.Image?.Id;
-
-        if (string.IsNullOrEmpty(mediaId))
-        {
-            _logger.LogWarning("Image message received but no media ID found");
-            await _whatsAppSendService.SendTextMessageAsync(
-                message.From,
-                "Sorry, I couldn't read your image. Please try sending it again.");
-            return;
-        }
-
-        _logger.LogInformation(
-            "Image received from {Phone} — Media ID: {Id}",
-            MaskPhone(message.From), mediaId);
-
-        try
-        {
-            // Step 1 — Download the image from Meta
-            var (imageBytes, mimeType) = await _mediaDownloadService
-                .DownloadMediaAsync(mediaId);
-
-            if (imageBytes == null || imageBytes.Length == 0)
-            {
-                await _whatsAppSendService.SendTextMessageAsync(
-                    message.From,
-                    "Sorry, I couldn't download your image. Please try again.");
-                return;
-            }
-
-            _logger.LogInformation(
-                "Image downloaded — {Size} bytes, type: {MimeType}",
-                imageBytes.Length, mimeType);
-
-            // Step 2 — Run visual search
-            await _messageProcessingService.ProcessImageMessageAsync(
-                message.From, imageBytes, mimeType, senderName);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to process image from {Phone}",
-                MaskPhone(message.From));
-
-            await _whatsAppSendService.SendTextMessageAsync(
-                message.From,
-                "Sorry, I had trouble analyzing your image. " +
-                "Please try again or describe what you're looking for in text.");
-        }
+        return await _context.Customers
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.PhoneNumber == phone);
     }
 
     private static string MaskPhone(string phone)
