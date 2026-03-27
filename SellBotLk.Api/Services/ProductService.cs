@@ -95,6 +95,7 @@ public class ProductService
         return await _productRepository.SoftDeleteAsync(id);
     }
 
+
     /// <summary>
     /// Smart search — uses Gemini to match a vague customer description
     /// like "red comfy chair" to the actual product catalogue.

@@ -9,6 +9,7 @@ public class ProductResponseDto
     public string Category { get; set; } = null!;
     public string? Description { get; set; }
     public decimal Price { get; set; }
+    public decimal MinPrice { get; set; } 
     public decimal BulkDiscountPercent { get; set; }
     public int BulkMinQty { get; set; }
     public int StockQty { get; set; }
