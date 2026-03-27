@@ -100,4 +100,35 @@ public class ProductsController : ControllerBase
         return Ok(new { success = true, data = products,
             count = products.Count, whatsAppMessage = formatted });
     }
+
+    
+    /// <summary>Visual search — upload a furniture photo to find similar products</summary>
+[HttpPost("visual-search")]
+public async Task<IActionResult> VisualSearch(
+    [FromServices] VisualSearchService visualSearchService,
+    IFormFile image)
+{
+    if (image == null || image.Length == 0)
+        return BadRequest(new { success = false, error = "No image provided" });
+
+    if (image.Length > 10 * 1024 * 1024)
+        return BadRequest(new { success = false, error = "Image must be under 10MB" });
+
+    var allowedTypes = new[] { "image/jpeg", "image/png", "image/webp" };
+    if (!allowedTypes.Contains(image.ContentType))
+        return BadRequest(new { success = false,
+            error = "Only JPEG, PNG, and WebP images are supported" });
+
+    using var ms = new MemoryStream();
+    await image.CopyToAsync(ms);
+    var imageBytes = ms.ToArray();
+
+    var result = await visualSearchService.SearchByImageAsync(
+        imageBytes, image.ContentType);
+
+    var whatsAppMessage = visualSearchService
+        .FormatVisualSearchResultForWhatsApp(result);
+
+    return Ok(new { success = true, data = result, whatsAppMessage });
+}
 }
