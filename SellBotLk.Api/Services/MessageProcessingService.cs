@@ -1,5 +1,6 @@
 using SellBotLk.Api.Data;
 using SellBotLk.Api.Integrations.Gemini;
+using SellBotLk.Api.Models.DTOs;
 using SellBotLk.Api.Models.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,6 +12,7 @@ public class MessageProcessingService
     private readonly WhatsAppSendService _whatsAppSendService;
     private readonly ProductService _productService;
     private readonly VisualSearchService _visualSearchService;
+    private readonly OrderService _orderService;
     private readonly AppDbContext _db;
     private readonly ILogger<MessageProcessingService> _logger;
 
@@ -19,6 +21,7 @@ public class MessageProcessingService
         WhatsAppSendService whatsAppSendService,
         ProductService productService,
         VisualSearchService visualSearchService,
+        OrderService orderService,
         AppDbContext db,
         ILogger<MessageProcessingService> logger)
     {
@@ -26,6 +29,7 @@ public class MessageProcessingService
         _whatsAppSendService = whatsAppSendService;
         _productService = productService;
         _visualSearchService = visualSearchService;
+        _orderService = orderService;
         _db = db;
         _logger = logger;
     }
@@ -34,36 +38,24 @@ public class MessageProcessingService
     public async Task ProcessTextMessageAsync(
         string fromPhone, string messageText, string senderName)
     {
-        // 1. Get or create customer
         var customer = await GetOrCreateCustomerAsync(fromPhone, senderName);
-
-        // 2. Get or create conversation
         var conversation = await GetOrCreateConversationAsync(customer.Id);
-
-        // 3. Build context
         var context = conversation.Context ?? "";
 
         _logger.LogInformation(
             "Processing message from {Phone} — State: {State}",
             MaskPhone(fromPhone), conversation.State);
 
-        // 4. Call Gemini
         var parsed = await _geminiService.ParseMessageAsync(
-            messageText,
-            customer.Name ?? senderName,
-            context);
+            messageText, customer.Name ?? senderName, context);
 
         _logger.LogInformation(
             "Intent: {Intent} ({Confidence:P0}) — Language: {Lang}",
             parsed.Intent, parsed.Confidence, parsed.Language);
 
-        // 5. Update language preference
         if (customer.PreferredLanguage != parsed.Language)
-        {
             customer.PreferredLanguage = parsed.Language;
-        }
 
-        // 6. Update conversation state
         conversation.State = parsed.Intent switch
         {
             "Greeting"         => ConversationState.Greeting,
@@ -78,7 +70,6 @@ public class MessageProcessingService
         conversation.LastMessageAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
 
-        // 7. Route based on intent
         switch (parsed.Intent)
         {
             case "ProductSearch":
@@ -88,6 +79,11 @@ public class MessageProcessingService
                     parsed.Language);
                 break;
 
+            case "Order":
+                await HandleOrderAsync(
+                    fromPhone, parsed, customer.Id, parsed.Language);
+                break;
+
             default:
                 await _whatsAppSendService.SendTextMessageAsync(
                     fromPhone, parsed.ReplyMessage);
@@ -95,7 +91,7 @@ public class MessageProcessingService
         }
     }
 
-    // 🖼️ HANDLE IMAGE MESSAGES (Visual Search)
+    // 🖼️ HANDLE IMAGE MESSAGES
     public async Task ProcessImageMessageAsync(
         string fromPhone, byte[] imageBytes, string mimeType, string senderName)
     {
@@ -106,20 +102,84 @@ public class MessageProcessingService
             "Processing image from {Phone} — running visual search",
             MaskPhone(fromPhone));
 
-        // Let customer know we received the image
         await _whatsAppSendService.SendTextMessageAsync(fromPhone,
             "🔍 Analyzing your image, please wait...");
 
-        // Run visual search via Gemini Vision
         var result = await _visualSearchService.SearchByImageAsync(imageBytes, mimeType);
         var message = _visualSearchService.FormatVisualSearchResultForWhatsApp(result);
 
-        // Update conversation state
         conversation.State = ConversationState.Browsing;
         conversation.LastMessageAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
 
         await _whatsAppSendService.SendTextMessageAsync(fromPhone, message);
+    }
+
+    // 🛒 ORDER HANDLER
+    private async Task HandleOrderAsync(
+        string fromPhone,
+        ParsedMessageIntent parsed,
+        int customerId,
+        string language)
+    {
+        if (parsed.OrderItems == null || !parsed.OrderItems.Any())
+        {
+            await _whatsAppSendService.SendTextMessageAsync(fromPhone,
+                "I'd love to help you order! Could you tell me which product " +
+                "and quantity you'd like? For example: 'I want 2 dining chairs'");
+            return;
+        }
+
+        var allProducts = await _productService.GetAllAsync();
+        var orderItems = new List<OrderItemDto>();
+
+        foreach (var item in parsed.OrderItems)
+        {
+            var match = allProducts.FirstOrDefault(p =>
+                p.Name.Contains(item.ProductName,
+                    StringComparison.OrdinalIgnoreCase) ||
+                item.ProductName.Contains(p.Name,
+                    StringComparison.OrdinalIgnoreCase) ||
+                p.Category.Contains(item.ProductName,
+                    StringComparison.OrdinalIgnoreCase));
+
+            if (match == null)
+            {
+                await _whatsAppSendService.SendTextMessageAsync(fromPhone,
+                    $"Sorry, I couldn't find '{item.ProductName}' in our catalogue. " +
+                    $"Type 'browse' to see all available products.");
+                return;
+            }
+
+            orderItems.Add(new OrderItemDto
+            {
+                ProductId = match.Id,
+                Quantity = item.Quantity,
+                NegotiatedPrice = item.OfferedPrice
+            });
+        }
+
+        try
+        {
+            var createDto = new CreateOrderDto
+            {
+                CustomerId = customerId,
+                Items = orderItems
+            };
+
+            var order = await _orderService.CreateOrderAsync(createDto);
+            var confirmationMsg = _orderService.FormatOrderConfirmationMessage(order);
+
+            await _whatsAppSendService.SendTextMessageAsync(fromPhone, confirmationMsg);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Order creation failed for {Phone}",
+                MaskPhone(fromPhone));
+
+            await _whatsAppSendService.SendTextMessageAsync(fromPhone,
+                $"Sorry, I couldn't process your order: {ex.Message}");
+        }
     }
 
     // 🔍 PRODUCT SEARCH HANDLER
@@ -146,8 +206,7 @@ public class MessageProcessingService
     }
 
     // 👤 GET OR CREATE CUSTOMER
-    private async Task<Customer> GetOrCreateCustomerAsync(
-        string phone, string name)
+    private async Task<Customer> GetOrCreateCustomerAsync(string phone, string name)
     {
         var customer = await _db.Customers
             .FirstOrDefaultAsync(c => c.PhoneNumber == phone);
@@ -164,9 +223,7 @@ public class MessageProcessingService
             _db.Customers.Add(customer);
             await _db.SaveChangesAsync();
 
-            _logger.LogInformation(
-                "New customer created: {Phone}",
-                MaskPhone(phone));
+            _logger.LogInformation("New customer created: {Phone}", MaskPhone(phone));
         }
 
         return customer;
@@ -191,7 +248,6 @@ public class MessageProcessingService
             await _db.SaveChangesAsync();
         }
 
-        // ⏱️ Reset stale conversations after 2 hours of inactivity
         if ((DateTime.UtcNow - conversation.LastMessageAt).TotalHours >= 2)
         {
             conversation.State = ConversationState.Greeting;
@@ -201,7 +257,7 @@ public class MessageProcessingService
         return conversation;
     }
 
-    // 🔒 MASK PHONE NUMBER FOR SAFE LOGGING
+    // 🔒 MASK PHONE
     private static string MaskPhone(string phone)
     {
         if (phone.Length < 6) return "***";
