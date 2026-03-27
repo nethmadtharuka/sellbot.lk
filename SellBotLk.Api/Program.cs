@@ -27,6 +27,8 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddHealthChecks();
+builder.Services.AddScoped<VisualSearchService>();
+builder.Services.AddScoped<MediaDownloadService>();
 
 var app = builder.Build();
 
@@ -38,6 +40,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseMiddleware<HmacVerificationMiddleware>();
 app.UseAuthorization();
+app.UseStaticFiles();
 app.MapControllers();
 app.MapHealthChecks("/health");
 

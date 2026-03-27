@@ -10,6 +10,7 @@ public class MessageProcessingService
     private readonly GeminiService _geminiService;
     private readonly WhatsAppSendService _whatsAppSendService;
     private readonly ProductService _productService;
+    private readonly VisualSearchService _visualSearchService;
     private readonly AppDbContext _db;
     private readonly ILogger<MessageProcessingService> _logger;
 
@@ -17,16 +18,19 @@ public class MessageProcessingService
         GeminiService geminiService,
         WhatsAppSendService whatsAppSendService,
         ProductService productService,
+        VisualSearchService visualSearchService,
         AppDbContext db,
         ILogger<MessageProcessingService> logger)
     {
         _geminiService = geminiService;
         _whatsAppSendService = whatsAppSendService;
         _productService = productService;
+        _visualSearchService = visualSearchService;
         _db = db;
         _logger = logger;
     }
 
+    // ✉️ HANDLE TEXT MESSAGES
     public async Task ProcessTextMessageAsync(
         string fromPhone, string messageText, string senderName)
     {
@@ -53,7 +57,7 @@ public class MessageProcessingService
             "Intent: {Intent} ({Confidence:P0}) — Language: {Lang}",
             parsed.Intent, parsed.Confidence, parsed.Language);
 
-        // 5. Update language
+        // 5. Update language preference
         if (customer.PreferredLanguage != parsed.Language)
         {
             customer.PreferredLanguage = parsed.Language;
@@ -62,18 +66,16 @@ public class MessageProcessingService
         // 6. Update conversation state
         conversation.State = parsed.Intent switch
         {
-            "Greeting" => ConversationState.Greeting,
-            "ProductSearch" => ConversationState.Browsing,
-            "Order" => ConversationState.Ordering,
+            "Greeting"         => ConversationState.Greeting,
+            "ProductSearch"    => ConversationState.Browsing,
+            "Order"            => ConversationState.Ordering,
             "PriceNegotiation" => ConversationState.Negotiating,
             "Complaint" or "OrderStatus" or "DeliveryInfo"
-                => ConversationState.Support,
-            _ => conversation.State
+                               => ConversationState.Support,
+            _                  => conversation.State
         };
 
         conversation.LastMessageAt = DateTime.UtcNow;
-
-        // 🔥 SAVE CHANGES (IMPORTANT)
         await _db.SaveChangesAsync();
 
         // 7. Route based on intent
@@ -93,6 +95,33 @@ public class MessageProcessingService
         }
     }
 
+    // 🖼️ HANDLE IMAGE MESSAGES (Visual Search)
+    public async Task ProcessImageMessageAsync(
+        string fromPhone, byte[] imageBytes, string mimeType, string senderName)
+    {
+        var customer = await GetOrCreateCustomerAsync(fromPhone, senderName);
+        var conversation = await GetOrCreateConversationAsync(customer.Id);
+
+        _logger.LogInformation(
+            "Processing image from {Phone} — running visual search",
+            MaskPhone(fromPhone));
+
+        // Let customer know we received the image
+        await _whatsAppSendService.SendTextMessageAsync(fromPhone,
+            "🔍 Analyzing your image, please wait...");
+
+        // Run visual search via Gemini Vision
+        var result = await _visualSearchService.SearchByImageAsync(imageBytes, mimeType);
+        var message = _visualSearchService.FormatVisualSearchResultForWhatsApp(result);
+
+        // Update conversation state
+        conversation.State = ConversationState.Browsing;
+        conversation.LastMessageAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        await _whatsAppSendService.SendTextMessageAsync(fromPhone, message);
+    }
+
     // 🔍 PRODUCT SEARCH HANDLER
     private async Task HandleProductSearchAsync(
         string fromPhone, string query, string language)
@@ -105,7 +134,7 @@ public class MessageProcessingService
             {
                 "si" => "සමාවෙන්න, ඔබ සොයන භාණ්ඩය නොමැත. 'browse' ටයිප් කරන්න.",
                 "ta" => "மன்னிக்கவும், தேடிய பொருள் கிடைக்கவில்லை. 'browse' என்று தட்டச்சு செய்யவும்.",
-                _ => "Sorry, I couldn't find matching products. Type 'browse' to see all items."
+                _    => "Sorry, I couldn't find matching products. Type 'browse' to see all items."
             };
 
             await _whatsAppSendService.SendTextMessageAsync(fromPhone, noResultMsg);
@@ -113,11 +142,10 @@ public class MessageProcessingService
         }
 
         var message = _productService.FormatProductsForWhatsApp(products);
-
         await _whatsAppSendService.SendTextMessageAsync(fromPhone, message);
     }
 
-    // 👤 CUSTOMER HANDLING
+    // 👤 GET OR CREATE CUSTOMER
     private async Task<Customer> GetOrCreateCustomerAsync(
         string phone, string name)
     {
@@ -144,7 +172,7 @@ public class MessageProcessingService
         return customer;
     }
 
-    // 💬 CONVERSATION HANDLING
+    // 💬 GET OR CREATE CONVERSATION
     private async Task<Conversation> GetOrCreateConversationAsync(int customerId)
     {
         var conversation = await _db.Conversations
@@ -163,7 +191,7 @@ public class MessageProcessingService
             await _db.SaveChangesAsync();
         }
 
-        // ⏱ Reset stale conversations (after 2 hours)
+        // ⏱️ Reset stale conversations after 2 hours of inactivity
         if ((DateTime.UtcNow - conversation.LastMessageAt).TotalHours >= 2)
         {
             conversation.State = ConversationState.Greeting;
@@ -173,7 +201,7 @@ public class MessageProcessingService
         return conversation;
     }
 
-    // 🔒 MASK PHONE (LOGGING SAFETY)
+    // 🔒 MASK PHONE NUMBER FOR SAFE LOGGING
     private static string MaskPhone(string phone)
     {
         if (phone.Length < 6) return "***";

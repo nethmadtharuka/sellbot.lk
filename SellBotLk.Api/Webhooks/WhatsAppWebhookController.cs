@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using SellBotLk.Api.Models.DTOs;
 using SellBotLk.Api.Services;
+using System.Text.Json;
 
 namespace SellBotLk.Api.Webhooks;
 
@@ -11,17 +12,20 @@ public class WhatsAppWebhookController : ControllerBase
     private readonly IConfiguration _config;
     private readonly WhatsAppSendService _whatsAppSendService;
     private readonly MessageProcessingService _messageProcessingService;
+    private readonly MediaDownloadService _mediaDownloadService;
     private readonly ILogger<WhatsAppWebhookController> _logger;
 
     public WhatsAppWebhookController(
         IConfiguration config,
         WhatsAppSendService whatsAppSendService,
         MessageProcessingService messageProcessingService,
+        MediaDownloadService mediaDownloadService,
         ILogger<WhatsAppWebhookController> logger)
     {
         _config = config;
         _whatsAppSendService = whatsAppSendService;
         _messageProcessingService = messageProcessingService;
+        _mediaDownloadService = mediaDownloadService;
         _logger = logger;
     }
 
@@ -94,11 +98,7 @@ public class WhatsAppWebhookController : ControllerBase
                 break;
 
             case "image":
-                _logger.LogInformation("Image received — Media ID: {Id}",
-                    message.Image?.Id);
-                await _whatsAppSendService.SendTextMessageAsync(
-                    message.From,
-                    "Image received! Visual search coming in Sprint 5.");
+                await HandleImageMessageAsync(message, senderName);
                 break;
 
             case "audio":
@@ -121,6 +121,59 @@ public class WhatsAppWebhookController : ControllerBase
                 _logger.LogInformation("Unhandled message type: {Type}",
                     message.Type);
                 break;
+        }
+    }
+
+    // 🖼️ IMAGE MESSAGE HANDLER
+    private async Task HandleImageMessageAsync(
+        WhatsAppMessageItemDto message, string senderName)
+    {
+        var mediaId = message.Image?.Id;
+
+        if (string.IsNullOrEmpty(mediaId))
+        {
+            _logger.LogWarning("Image message received but no media ID found");
+            await _whatsAppSendService.SendTextMessageAsync(
+                message.From,
+                "Sorry, I couldn't read your image. Please try sending it again.");
+            return;
+        }
+
+        _logger.LogInformation(
+            "Image received from {Phone} — Media ID: {Id}",
+            MaskPhone(message.From), mediaId);
+
+        try
+        {
+            // Step 1 — Download the image from Meta
+            var (imageBytes, mimeType) = await _mediaDownloadService
+                .DownloadMediaAsync(mediaId);
+
+            if (imageBytes == null || imageBytes.Length == 0)
+            {
+                await _whatsAppSendService.SendTextMessageAsync(
+                    message.From,
+                    "Sorry, I couldn't download your image. Please try again.");
+                return;
+            }
+
+            _logger.LogInformation(
+                "Image downloaded — {Size} bytes, type: {MimeType}",
+                imageBytes.Length, mimeType);
+
+            // Step 2 — Run visual search
+            await _messageProcessingService.ProcessImageMessageAsync(
+                message.From, imageBytes, mimeType, senderName);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to process image from {Phone}",
+                MaskPhone(message.From));
+
+            await _whatsAppSendService.SendTextMessageAsync(
+                message.From,
+                "Sorry, I had trouble analyzing your image. " +
+                "Please try again or describe what you're looking for in text.");
         }
     }
 

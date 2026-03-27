@@ -79,6 +79,93 @@ public class GeminiService
 
         return await CallGeminiAsync(prompt);
     }
+    /// <summary>
+/// Analyzes a furniture image using Gemini Vision and extracts
+/// product attributes for visual similarity matching.
+/// </summary>
+public async Task<VisualSearchAttributes> AnalyzeImageAsync(byte[] imageBytes, string mimeType)
+{
+    var apiKey = _config["Gemini:ApiKey"];
+    var model = _config["Gemini:Model"] ?? "gemini-1.5-flash";
+    var url = $"{BaseUrl}/{model}:generateContent?key={apiKey}";
+
+    var base64Image = Convert.ToBase64String(imageBytes);
+
+    var requestBody = new
+    {
+        contents = new[]
+        {
+            new
+            {
+                parts = new object[]
+                {
+                    new
+                    {
+                        inline_data = new
+                        {
+                            mime_type = mimeType,
+                            data = base64Image
+                        }
+                    },
+                    new
+                    {
+                        text = """
+                            Analyze this furniture image and respond with ONLY a valid JSON object.
+                            No markdown, no backticks, no explanation.
+
+                            {
+                              "type": "Chair/Table/Sofa/Desk/Bed/Storage/Other",
+                              "color": "primary color",
+                              "material": "Wood/Fabric/Leather/Metal/Glass/Other",
+                              "style": "Modern/Traditional/Scandinavian/Industrial/Classic/Other",
+                              "description": "one sentence describing the furniture"
+                            }
+                            """
+                    }
+                }
+            }
+        },
+        generationConfig = new
+        {
+            temperature = 0.1,
+            maxOutputTokens = 500
+        }
+    };
+
+    var json = JsonSerializer.Serialize(requestBody);
+    var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+    try
+    {
+        var response = await _httpClient.PostAsync(url, content);
+        var responseBody = await response.Content.ReadAsStringAsync();
+
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogError("Gemini Vision error: {Status}", response.StatusCode);
+            return new VisualSearchAttributes();
+        }
+
+        var jsonDoc = JsonNode.Parse(responseBody);
+        var text = jsonDoc?["candidates"]?[0]?["content"]?["parts"]?[0]?["text"]
+            ?.GetValue<string>() ?? "";
+
+        var cleaned = text.Replace("```json", "").Replace("```", "").Trim();
+        var start = cleaned.IndexOf('{');
+        var end = cleaned.LastIndexOf('}');
+        if (start >= 0 && end > start)
+            cleaned = cleaned[start..(end + 1)];
+
+        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        return JsonSerializer.Deserialize<VisualSearchAttributes>(cleaned, options)
+               ?? new VisualSearchAttributes();
+    }
+    catch (Exception ex)
+    {
+        _logger.LogWarning(ex, "Failed to analyze image with Gemini Vision");
+        return new VisualSearchAttributes();
+    }
+}
 
     private string BuildParsePrompt(
     string message, string customerName, string context)
