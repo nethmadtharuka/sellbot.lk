@@ -29,6 +29,9 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddHealthChecks();
 builder.Services.AddScoped<VisualSearchService>();
 builder.Services.AddScoped<MediaDownloadService>();
+builder.Services.AddScoped<OrderRepository>();
+builder.Services.AddScoped<OrderNumberGenerator>();
+builder.Services.AddScoped<OrderService>();
 
 var app = builder.Build();
 

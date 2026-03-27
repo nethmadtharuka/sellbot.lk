@@ -69,4 +69,21 @@ public class ProductRepository
         await _db.SaveChangesAsync();
         return true;
     }
+    public async Task DeductStockAsync(int productId, int quantity)
+{
+    var product = await _db.Products.FindAsync(productId);
+    if (product == null) return;
+
+    product.StockQty -= quantity;
+    await _db.SaveChangesAsync();
+}
+
+public async Task RestockAsync(int productId, int quantity)
+{
+    var product = await _db.Products.FindAsync(productId);
+    if (product == null) return;
+
+    product.StockQty += quantity;
+    await _db.SaveChangesAsync();
+}
 }
