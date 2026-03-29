@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using SellBotLk.Api.Models.DTOs;
 using SellBotLk.Api.Models.Entities;
 using SellBotLk.Api.Services;
 using SellBotLk.Api.Data;
@@ -44,16 +45,8 @@ public class DocumentsController : ControllerBase
             .Take(pageSize)
             .ToListAsync();
 
-        return Ok(new
-        {
-            success = true,
-            data = documents,
-            total,
-            page,
-            pageSize
-        });
+        return Ok(new { success = true, data = documents, total, page, pageSize });
     }
-    
 
     /// <summary>Get a single document by ID</summary>
     [HttpGet("{id}")]
@@ -73,38 +66,38 @@ public class DocumentsController : ControllerBase
     /// <summary>
     /// Upload and process a document (invoice, payment slip, damage photo).
     /// Accepts image files and PDFs up to 10MB.
+    /// documentType values: SupplierInvoice, PaymentSlip, DamageReport, CustomerBill
     /// </summary>
     [HttpPost("process")]
+    [Consumes("multipart/form-data")]
     public async Task<IActionResult> ProcessDocument(
-        [FromForm] IFormFile file,
-        [FromForm] string documentType,
-        [FromForm] int? customerId = null)
+        [FromForm] ProcessDocumentRequest request)
     {
-        if (file == null || file.Length == 0)
+        if (request.File == null || request.File.Length == 0)
             return BadRequest(new { success = false,
                 error = "No file provided" });
 
-        if (file.Length > 10 * 1024 * 1024)
+        if (request.File.Length > 10 * 1024 * 1024)
             return BadRequest(new { success = false,
                 error = "File too large. Maximum size is 10MB." });
 
-        var mimeType = file.ContentType.ToLower();
+        var mimeType = request.File.ContentType.ToLower();
         if (!MediaDownloadService.IsAcceptedType(mimeType))
             return BadRequest(new { success = false,
                 error = "Invalid file type. Accepted: JPEG, PNG, WebP, PDF" });
 
-        if (!Enum.TryParse<DocumentType>(documentType, out var docType))
+        if (!Enum.TryParse<DocumentType>(request.DocumentType, out var docType))
             return BadRequest(new { success = false,
-                error = $"Invalid document type: {documentType}. " +
+                error = $"Invalid document type: {request.DocumentType}. " +
                         "Valid: SupplierInvoice, PaymentSlip, " +
                         "DamageReport, CustomerBill" });
 
         using var ms = new MemoryStream();
-        await file.CopyToAsync(ms);
+        await request.File.CopyToAsync(ms);
         var fileBytes = ms.ToArray();
 
         var result = await _documentService.ProcessDocumentAsync(
-            fileBytes, mimeType, docType, customerId);
+            fileBytes, mimeType, docType, request.CustomerId);
 
         return Ok(new { success = true, data = result });
     }

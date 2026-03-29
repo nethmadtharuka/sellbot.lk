@@ -16,6 +16,7 @@ public class WhatsAppWebhookController : ControllerBase
     private readonly MessageProcessingService _messageProcessingService;
     private readonly DocumentService _documentService;
     private readonly MediaDownloadService _mediaDownloadService;
+    private readonly PaymentMatchingService _paymentMatchingService;
     private readonly AppDbContext _context;
     private readonly ILogger<WhatsAppWebhookController> _logger;
 
@@ -25,6 +26,7 @@ public class WhatsAppWebhookController : ControllerBase
         MessageProcessingService messageProcessingService,
         DocumentService documentService,
         MediaDownloadService mediaDownloadService,
+        PaymentMatchingService paymentMatchingService,
         AppDbContext context,
         ILogger<WhatsAppWebhookController> logger)
     {
@@ -33,6 +35,7 @@ public class WhatsAppWebhookController : ControllerBase
         _messageProcessingService = messageProcessingService;
         _documentService = documentService;
         _mediaDownloadService = mediaDownloadService;
+        _paymentMatchingService = paymentMatchingService;
         _context = context;
         _logger = logger;
     }
@@ -129,12 +132,11 @@ public class WhatsAppWebhookController : ControllerBase
                     {
                         var customer = await GetCustomerByPhoneAsync(message.From);
 
-                        // Images from customers treated as payment slips by default.
-                        // Sprint 10 will add AI-based document type detection.
-                        await _documentService.ProcessDocumentAsync(
+                        // Sprint 15 — route images to PaymentMatchingService
+                        // which handles extraction + matching + delivery info
+                        await _paymentMatchingService.ProcessPaymentSlipAsync(
                             imgBytes,
                             imgMime,
-                            DocumentType.PaymentSlip,
                             customer?.Id,
                             message.From);
                     }

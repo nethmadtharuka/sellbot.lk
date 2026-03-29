@@ -100,3 +100,10 @@ public class ExtractedDamageData
     [JsonPropertyName("recommendation")]
     public string? Recommendation { get; set; }
 }
+
+public class ProcessDocumentRequest
+{
+    public IFormFile File { get; set; } = null!;
+    public string DocumentType { get; set; } = null!;
+    public int? CustomerId { get; set; }
+}
