@@ -15,10 +15,12 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddScoped<ProductRepository>();
 builder.Services.AddScoped<OrderRepository>();
 
-// HTTP Clients
-builder.Services.AddHttpClient<WhatsAppSendService>();
+// Gemini integrations
 builder.Services.AddHttpClient<GeminiService>();
 builder.Services.AddHttpClient<GeminiVisionService>();
+
+// WhatsApp integrations
+builder.Services.AddHttpClient<WhatsAppSendService>();
 builder.Services.AddHttpClient<MediaDownloadService>();
 
 // Services
@@ -26,15 +28,16 @@ builder.Services.AddScoped<WhatsAppSendService>();
 builder.Services.AddScoped<GeminiService>();
 builder.Services.AddScoped<GeminiVisionService>();
 builder.Services.AddScoped<MediaDownloadService>();
-builder.Services.AddScoped<ProductService>();
-builder.Services.AddScoped<DocumentService>();
-builder.Services.AddScoped<VisualSearchService>();
 builder.Services.AddScoped<OrderNumberGenerator>();
+builder.Services.AddScoped<ProductService>();
 builder.Services.AddScoped<OrderService>();
-builder.Services.AddScoped<NegotiationService>();
+builder.Services.AddScoped<DocumentService>();
+builder.Services.AddScoped<DeliveryService>();
+builder.Services.AddScoped<PaymentMatchingService>();
+builder.Services.AddScoped<VisualSearchService>();
 builder.Services.AddScoped<MessageProcessingService>();
 builder.Services.AddMemoryCache();
-
+builder.Services.AddScoped<NegotiationService>();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();

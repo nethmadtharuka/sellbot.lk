@@ -9,13 +9,16 @@ namespace SellBotLk.Api.Controllers;
 public class OrdersController : ControllerBase
 {
     private readonly OrderService _orderService;
+    private readonly DeliveryService _deliveryService;
     private readonly ILogger<OrdersController> _logger;
 
     public OrdersController(
         OrderService orderService,
+         DeliveryService deliveryService, 
         ILogger<OrdersController> logger)
     {
         _orderService = orderService;
+        _deliveryService = deliveryService;
         _logger = logger;
     }
 
@@ -92,6 +95,26 @@ public class OrdersController : ControllerBase
             return BadRequest(new { success = false, error = ex.Message });
         }
     }
+
+    /// <summary>
+/// Update delivery status and notify customer via WhatsApp.
+/// Valid transitions: Confirmed→Processing→Dispatched→Delivered
+/// </summary>
+[HttpPut("{id}/delivery-status")]
+public async Task<IActionResult> UpdateDeliveryStatus(
+    int id, [FromBody] UpdateDeliveryStatusDto dto)
+{
+    var success = await _deliveryService.UpdateDeliveryStatusAsync(
+        id, dto.Status, dto.DriverNote);
+
+    if (!success)
+        return BadRequest(new { success = false,
+            error = $"Invalid status transition to '{dto.Status}'. " +
+                    "Check current order status." });
+
+    return Ok(new { success = true,
+        message = $"Order {id} status updated to {dto.Status}" });
+}
 
     /// <summary>Cancel an order and restore stock</summary>
     [HttpPut("{id}/cancel")]

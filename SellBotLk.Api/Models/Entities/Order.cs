@@ -130,8 +130,18 @@ public class Order
     /// <summary>
     /// Timestamp of order creation.
     /// </summary>
+    /// 
+    
     [Required]
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+/// Delivery driver instructions or notes.
+/// Set by admin when dispatching the order.
+/// Example: "Call customer before arriving", "Leave at gate".
+/// </summary>
+[MaxLength(500)]
+public string? DriverNote { get; set; }
 
     /// <summary>
     /// Timestamp of the last status change.
