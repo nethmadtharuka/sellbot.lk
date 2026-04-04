@@ -65,6 +65,7 @@ public class WhatsAppWebhookController : ControllerBase
     /// <summary>
     /// Receives all incoming WhatsApp messages and events.
     /// HMAC signature verified by HmacVerificationMiddleware before reaching here.
+    /// Always returns 200 to Meta — never let Meta retry due to our errors.
     /// </summary>
     [HttpPost("whatsapp")]
     public async Task<IActionResult> Receive([FromBody] WhatsAppIncomingDto payload)
@@ -93,7 +94,27 @@ public class WhatsAppWebhookController : ControllerBase
                     "Message received from {Phone} ({Name}) — Type: {Type}",
                     MaskPhone(message.From), senderName, message.Type);
 
-                await ProcessMessageAsync(message, senderName);
+                // FIX 1: Per-message try/catch so one bad message doesn't kill
+                // processing of all other messages in the same webhook batch.
+                try
+                {
+                    await ProcessMessageAsync(message, senderName);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex,
+                        "Failed to process message from {Phone} — Type: {Type}",
+                        MaskPhone(message.From), message.Type);
+
+                    // Best-effort error reply — don't let this throw either
+                    try
+                    {
+                        await _whatsAppSendService.SendTextMessageAsync(
+                            message.From,
+                            "Sorry, something went wrong. Please try again! 🙏");
+                    }
+                    catch { /* swallow — we must return 200 */ }
+                }
             }
 
             return Ok();
@@ -118,36 +139,7 @@ public class WhatsAppWebhookController : ControllerBase
                 break;
 
             case "image":
-                var imageMediaId = message.Image?.Id;
-                if (!string.IsNullOrEmpty(imageMediaId))
-                {
-                    await _whatsAppSendService.SendTextMessageAsync(
-                        message.From,
-                        "📄 Processing your image... please wait.");
-
-                    var (imgBytes, imgMime) = await _mediaDownloadService
-                        .DownloadMediaAsync(imageMediaId);
-
-                    if (imgBytes.Length > 0)
-                    {
-                        var customer = await GetCustomerByPhoneAsync(message.From);
-
-                        // Sprint 15 — route images to PaymentMatchingService
-                        // which handles extraction + matching + delivery info
-                        await _paymentMatchingService.ProcessPaymentSlipAsync(
-                            imgBytes,
-                            imgMime,
-                            customer?.Id,
-                            message.From);
-                    }
-                    else
-                    {
-                        await _whatsAppSendService.SendTextMessageAsync(
-                            message.From,
-                            "Sorry, I couldn't download your image. " +
-                            "Please try sending it again.");
-                    }
-                }
+                await HandleImageMessageAsync(message, senderName);
                 break;
 
             case "audio":
@@ -155,48 +147,159 @@ public class WhatsAppWebhookController : ControllerBase
                     message.Audio?.Id);
                 await _whatsAppSendService.SendTextMessageAsync(
                     message.From,
-                    "Voice note received! Audio processing coming in Sprint 14.");
+                    "🎤 Voice note received! " +
+                    "Audio processing coming soon. " +
+                    "For now, please type your order and I'll help you right away!");
                 break;
 
             case "document":
-                var docMediaId = message.Document?.Id;
-                if (!string.IsNullOrEmpty(docMediaId))
-                {
-                    await _whatsAppSendService.SendTextMessageAsync(
-                        message.From,
-                        "📄 Processing your document... please wait.");
-
-                    var (docBytes, docMime) = await _mediaDownloadService
-                        .DownloadMediaAsync(docMediaId);
-
-                    if (docBytes.Length > 0)
-                    {
-                        var customer = await GetCustomerByPhoneAsync(message.From);
-
-                        // PDFs treated as supplier invoices by default.
-                        // Owner can reprocess with correct type from dashboard.
-                        await _documentService.ProcessDocumentAsync(
-                            docBytes,
-                            docMime,
-                            DocumentType.SupplierInvoice,
-                            customer?.Id,
-                            message.From);
-                    }
-                    else
-                    {
-                        await _whatsAppSendService.SendTextMessageAsync(
-                            message.From,
-                            "Sorry, I couldn't download your document. " +
-                            "Please try again.");
-                    }
-                }
+                await HandleDocumentMessageAsync(message, senderName);
                 break;
 
             default:
-                _logger.LogInformation("Unhandled message type: {Type}",
-                    message.Type);
+                _logger.LogInformation("Unhandled message type: {Type}", message.Type);
+                await _whatsAppSendService.SendTextMessageAsync(
+                    message.From,
+                    "I received your message but couldn't process this type. " +
+                    "Please send text, a photo, or a document!");
                 break;
         }
+    }
+
+    /// <summary>
+    /// FIX 2: Image routing is now context-aware.
+    ///
+    /// The old code sent EVERY image to PaymentMatchingService, which meant:
+    /// - Product photos → treated as payment slips (wrong)
+    /// - Furniture photos for visual search → never reached VisualSearchService (wrong)
+    ///
+    /// New logic:
+    /// - If conversation state is Payment-related → PaymentMatchingService
+    /// - If customer recently sent "pay" / "payment" text → PaymentMatchingService
+    /// - Otherwise → MessageProcessingService.ProcessImageMessageAsync (visual search)
+    ///
+    /// This correctly handles both flows without requiring the customer to type
+    /// a special keyword.
+    /// </summary>
+    private async Task HandleImageMessageAsync(
+        WhatsAppMessageItemDto message, string senderName)
+    {
+        var imageMediaId = message.Image?.Id;
+        if (string.IsNullOrEmpty(imageMediaId))
+        {
+            await _whatsAppSendService.SendTextMessageAsync(
+                message.From,
+                "I received your image but couldn't read it. Please try again!");
+            return;
+        }
+
+        await _whatsAppSendService.SendTextMessageAsync(
+            message.From,
+            "📸 Got your image! Analyzing it now, please wait...");
+
+        var (imgBytes, imgMime) = await _mediaDownloadService
+            .DownloadMediaAsync(imageMediaId);
+
+        if (imgBytes.Length == 0)
+        {
+            await _whatsAppSendService.SendTextMessageAsync(
+                message.From,
+                "Sorry, I couldn't download your image. Please try sending it again.");
+            return;
+        }
+
+        // Determine whether this image is a payment slip or a product photo
+        var customer = await GetCustomerByPhoneAsync(message.From);
+        var isPaymentContext = await IsPaymentContextAsync(customer?.Id);
+
+        if (isPaymentContext)
+        {
+            _logger.LogInformation(
+                "Image from {Phone} routed to PaymentMatchingService (payment context)",
+                MaskPhone(message.From));
+
+            await _paymentMatchingService.ProcessPaymentSlipAsync(
+                imgBytes, imgMime, customer?.Id, message.From);
+        }
+        else
+        {
+            _logger.LogInformation(
+                "Image from {Phone} routed to VisualSearchService (product search context)",
+                MaskPhone(message.From));
+
+            await _messageProcessingService.ProcessImageMessageAsync(
+                message.From, imgBytes, imgMime, senderName);
+        }
+    }
+
+    private async Task HandleDocumentMessageAsync(
+        WhatsAppMessageItemDto message, string senderName)
+    {
+        var docMediaId = message.Document?.Id;
+        if (string.IsNullOrEmpty(docMediaId))
+        {
+            await _whatsAppSendService.SendTextMessageAsync(
+                message.From,
+                "I received your document but couldn't read it. Please try again!");
+            return;
+        }
+
+        await _whatsAppSendService.SendTextMessageAsync(
+            message.From,
+            "📄 Processing your document... please wait.");
+
+        var (docBytes, docMime) = await _mediaDownloadService
+            .DownloadMediaAsync(docMediaId);
+
+        if (docBytes.Length == 0)
+        {
+            await _whatsAppSendService.SendTextMessageAsync(
+                message.From,
+                "Sorry, I couldn't download your document. Please try again.");
+            return;
+        }
+
+        var customer = await GetCustomerByPhoneAsync(message.From);
+
+        // PDFs are treated as supplier invoices by default.
+        // Owner can reprocess with correct type from the admin dashboard.
+        await _documentService.ProcessDocumentAsync(
+            docBytes,
+            docMime,
+            DocumentType.SupplierInvoice,
+            customer?.Id,
+            message.From);
+    }
+
+    /// <summary>
+    /// Determines if the current conversation context suggests the customer
+    /// is sending a payment slip rather than a product photo.
+    ///
+    /// Returns true if:
+    /// - Conversation state is Ordering or Support (payment likely after order)
+    /// - Customer has an Unpaid confirmed order (waiting for payment)
+    /// </summary>
+    private async Task<bool> IsPaymentContextAsync(int? customerId)
+    {
+        if (customerId == null) return false;
+
+        // Check if there's an active conversation in ordering/payment state
+        var conversation = await _context.Conversations
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.CustomerId == customerId);
+
+        if (conversation?.State == ConversationState.Ordering)
+            return true;
+
+        // Check if customer has a confirmed but unpaid order — payment slip expected
+        var hasUnpaidOrder = await _context.Orders
+            .AsNoTracking()
+            .AnyAsync(o =>
+                o.CustomerId == customerId &&
+                o.PaymentStatus == PaymentStatus.Unpaid &&
+                (o.Status == OrderStatus.Confirmed || o.Status == OrderStatus.Processing));
+
+        return hasUnpaidOrder;
     }
 
     private async Task<Customer?> GetCustomerByPhoneAsync(string phone)

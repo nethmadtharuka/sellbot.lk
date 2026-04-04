@@ -95,7 +95,6 @@ public class ProductService
         return await _productRepository.SoftDeleteAsync(id);
     }
 
-
     /// <summary>
     /// Smart search — uses Gemini to match a vague customer description
     /// like "red comfy chair" to the actual product catalogue.
@@ -105,7 +104,6 @@ public class ProductService
     {
         var allProducts = await _productRepository.GetAllActiveAsync();
 
-        // Apply basic filters first to reduce Gemini prompt size
         var filtered = allProducts.Where(p =>
             (category == null || p.Category == category) &&
             (maxPrice == null || p.Price <= maxPrice))
@@ -114,7 +112,6 @@ public class ProductService
         if (!filtered.Any())
             return new List<ProductResponseDto>();
 
-        // Build a compact catalogue summary for Gemini
         var catalogue = filtered.Select(p =>
             $"ID:{p.Id} | {p.Name} | {p.Category} | " +
             $"LKR {p.Price} | Color:{p.Color} | " +
@@ -123,19 +120,23 @@ public class ProductService
 
         var catalogueText = string.Join("\n", catalogue);
 
+        // FIX: Use CallGeminiRawAsync instead of GenerateReplyAsync.
+        // GenerateReplyAsync wraps the prompt in a "Be friendly and professional"
+        // persona which causes Gemini to refuse JSON output. CallGeminiRawAsync
+        // sends the prompt directly with no persona wrapping.
         var prompt = $"""
             A customer is searching for: "{query}"
-            
+
             Available products:
             {catalogueText}
-            
+
             Return ONLY a JSON array of the top 3 most relevant product IDs.
             Example: [12, 5, 8]
             If no products match, return an empty array: []
-            Do not include any explanation — just the JSON array.
+            Do not include any explanation — ONLY the JSON array, nothing else.
             """;
 
-        var response = await _geminiService.GenerateReplyAsync(prompt, "en");
+        var response = await _geminiService.CallGeminiRawAsync(prompt);
 
         try
         {
@@ -158,12 +159,15 @@ public class ProductService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to parse Gemini search response");
+            _logger.LogWarning(ex,
+                "Failed to parse Gemini search response — falling back to text match");
 
             // Fallback — simple name/category text match
             return filtered
-                .Where(p => p.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                            p.Category.Contains(query, StringComparison.OrdinalIgnoreCase))
+                .Where(p =>
+                    p.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                    p.Category.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                    (p.Description ?? "").Contains(query, StringComparison.OrdinalIgnoreCase))
                 .Take(3)
                 .Select(MapToDto)
                 .ToList();
@@ -171,18 +175,46 @@ public class ProductService
     }
 
     /// <summary>
+    /// Builds a compact catalogue summary string for injecting into Gemini prompts.
+    /// This lets Gemini know what products exist when parsing order/search messages.
+    /// </summary>
+    public async Task<string> BuildCatalogueSummaryAsync()
+    {
+        var products = await _productRepository.GetAllActiveAsync();
+        if (!products.Any()) return "";
+
+        var lines = products.Select(p =>
+            $"- {p.Name} (ID:{p.Id}) | {p.Category} | LKR {p.Price:N0}" +
+            (p.StockQty == 0 ? " | OUT OF STOCK" : $" | Stock:{p.StockQty}"));
+
+        return string.Join("\n", lines);
+    }
+
+    /// <summary>
     /// Formats products as a WhatsApp-friendly message string.
     /// </summary>
-    public string FormatProductsForWhatsApp(List<ProductResponseDto> products)
+    public string FormatProductsForWhatsApp(
+        List<ProductResponseDto> products, string language = "en")
     {
         if (!products.Any())
-            return "Sorry, I couldn't find any matching products. " +
-                   "Type 'browse' to see all available items.";
-
-        var lines = new List<string>
         {
-            $"Found {products.Count} matching product(s):\n"
+            return language switch
+            {
+                "si" => "සමාවෙන්න, ගැළපෙන භාණ්ඩ නොමැත. 'browse' ටයිප් කරන්න.",
+                "ta" => "மன்னிக்கவும், பொருந்திய பொருட்கள் இல்லை. 'browse' என்று தட்டச்சு செய்யவும்.",
+                _ => "Sorry, I couldn't find any matching products. " +
+                     "Type 'browse' to see all available items."
+            };
+        }
+
+        var header = language switch
+        {
+            "si" => $"🛋️ *{products.Count} ගැළපෙන භාණ්ඩ:*\n",
+            "ta" => $"🛋️ *{products.Count} பொருந்திய பொருட்கள்:*\n",
+            _ => $"🛋️ *Found {products.Count} matching product(s):*\n"
         };
+
+        var lines = new List<string> { header };
 
         foreach (var p in products)
         {
@@ -195,14 +227,19 @@ public class ProductService
                 : "";
 
             lines.Add($"*{p.Name}*\n" +
-                     $"   💰 LKR {p.Price:N0}\n" +
-                     $"   {stockStatus}" +
-                     bulkInfo);
+                      $"   💰 LKR {p.Price:N0}\n" +
+                      $"   {stockStatus}" +
+                      bulkInfo);
         }
 
-        lines.Add("\nReply with the product name to order, " +
-                 "or ask for more details!");
+        var footer = language switch
+        {
+            "si" => "\nඔඩරය දෙන්න නමෙන් ලියන්න, නැතිනම් තවත් විස්තර ඉල්ලන්න!",
+            "ta" => "\nஆர்டர் செய்ய பெயரை தட்டச்சு செய்யவும், அல்லது மேலும் விவரங்கள் கேளுங்கள்!",
+            _ => "\nReply with the product name to order, or ask for more details!"
+        };
 
+        lines.Add(footer);
         return string.Join("\n", lines);
     }
 
