@@ -486,7 +486,14 @@ public class MessageProcessingService
             var confirmMsg = _orderService.FormatOrderConfirmationMessage(order);
 
             await _negotiationService.ClearNegotiationContextAsync(customerId);
-            await _whatsAppSendService.SendTextMessageAsync(fromPhone, confirmMsg);
+            await _whatsAppSendService.SendButtonMessageAsync(
+                fromPhone,
+                confirmMsg,
+                new[]
+                {
+                    ($"track_{order.OrderNumber}", "Track Order"),
+                    ($"cancel_{order.OrderNumber}", "Cancel Order")
+                });
             return;
         }
 
@@ -632,7 +639,14 @@ public class MessageProcessingService
 
             var order = await _orderService.CreateOrderAsync(createDto);
             var confirmationMsg = _orderService.FormatOrderConfirmationMessage(order);
-            await _whatsAppSendService.SendTextMessageAsync(fromPhone, confirmationMsg);
+            await _whatsAppSendService.SendButtonMessageAsync(
+                fromPhone,
+                confirmationMsg,
+                new[]
+                {
+                    ($"track_{order.OrderNumber}", "Track Order"),
+                    ($"cancel_{order.OrderNumber}", "Cancel Order")
+                });
         }
         catch (Exception ex)
         {

@@ -214,7 +214,6 @@ public class OrderService
             lines.Add($"🚚 Delivery to: {order.DeliveryArea}");
 
         lines.Add($"\nThank you for your order! 🙏");
-        lines.Add($"Reply with your order number *{order.OrderNumber}* to track your order.");
 
         return string.Join("\n", lines);
     }

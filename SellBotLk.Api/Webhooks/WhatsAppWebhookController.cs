@@ -94,8 +94,9 @@ public class WhatsAppWebhookController : ControllerBase
                     "Message received from {Phone} ({Name}) — Type: {Type}",
                     MaskPhone(message.From), senderName, message.Type);
 
-                // FIX 1: Per-message try/catch so one bad message doesn't kill
-                // processing of all other messages in the same webhook batch.
+                // Mark as read + show typing indicator before processing
+                await _whatsAppSendService.MarkAsReadWithTypingAsync(message.Id);
+
                 try
                 {
                     await ProcessMessageAsync(message, senderName);
