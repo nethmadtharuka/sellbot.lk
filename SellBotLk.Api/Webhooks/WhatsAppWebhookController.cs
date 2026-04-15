@@ -1,4 +1,6 @@
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using SellBotLk.Api.Data;
 using SellBotLk.Api.Models.DTOs;
@@ -9,6 +11,7 @@ namespace SellBotLk.Api.Webhooks;
 
 [ApiController]
 [Route("api/v1/webhook")]
+[EnableRateLimiting("webhook")]
 public class WhatsAppWebhookController : ControllerBase
 {
     private readonly IConfiguration _config;
@@ -94,8 +97,9 @@ public class WhatsAppWebhookController : ControllerBase
                     "Message received from {Phone} ({Name}) — Type: {Type}",
                     MaskPhone(message.From), senderName, message.Type);
 
-                // FIX 1: Per-message try/catch so one bad message doesn't kill
-                // processing of all other messages in the same webhook batch.
+                // Mark as read + show typing indicator before processing
+                await _whatsAppSendService.MarkAsReadWithTypingAsync(message.Id);
+
                 try
                 {
                     await ProcessMessageAsync(message, senderName);

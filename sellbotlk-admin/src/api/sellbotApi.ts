@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPut } from './http'
+import { apiGet, apiPost, apiPut, setToken } from './http'
 import type {
   ApiEnvelope,
   DeliveryCheckRequestDto,
@@ -10,6 +10,12 @@ import type {
 } from './types'
 
 export const sellbotApi = {
+  login: async (username: string, password: string) => {
+    const res = await apiPost<{ token: string }>('/api/v1/auth/login', { username, password })
+    setToken(res.token)
+    return res
+  },
+
   getOrders: (params?: { status?: string; customerId?: number }) => {
     const usp = new URLSearchParams()
     if (params?.status) usp.set('status', params.status)

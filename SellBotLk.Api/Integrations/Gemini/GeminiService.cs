@@ -285,7 +285,7 @@ public class GeminiService
             generationConfig = new
             {
                 temperature = 0.3,
-                maxOutputTokens = 1000
+                maxOutputTokens = 2048
             }
         };
 
@@ -382,14 +382,63 @@ public class GeminiService
                 PropertyNameCaseInsensitive = true
             };
 
-            return JsonSerializer.Deserialize<ParsedMessageIntent>(cleaned, options)
-                ?? FallbackIntent();
+            // First try: parse as-is
+            try
+            {
+                return JsonSerializer.Deserialize<ParsedMessageIntent>(cleaned, options)
+                    ?? FallbackIntent();
+            }
+            catch (JsonException)
+            {
+                // JSON may be truncated by token limit — try to repair by closing
+                // open strings, arrays, and objects
+                var repaired = RepairTruncatedJson(cleaned);
+                _logger.LogWarning("Attempting to parse repaired JSON: {Repaired}", repaired);
+                return JsonSerializer.Deserialize<ParsedMessageIntent>(repaired, options)
+                    ?? FallbackIntent();
+            }
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to parse Gemini response: {Raw}", rawResponse);
             return FallbackIntent();
         }
+    }
+
+    private static string RepairTruncatedJson(string json)
+    {
+        var inString = false;
+        var escape = false;
+        var stack = new Stack<char>();
+
+        foreach (var c in json)
+        {
+            if (escape) { escape = false; continue; }
+            if (c == '\\' && inString) { escape = true; continue; }
+            if (c == '"') { inString = !inString; continue; }
+            if (inString) continue;
+
+            switch (c)
+            {
+                case '{': stack.Push('}'); break;
+                case '[': stack.Push(']'); break;
+                case '}' or ']' when stack.Count > 0: stack.Pop(); break;
+            }
+        }
+
+        // Close any open string
+        if (inString) json += "\"";
+
+        // Remove trailing comma or colon that precedes a missing value
+        json = json.TrimEnd();
+        if (json.EndsWith(',') || json.EndsWith(':'))
+            json = json[..^1];
+
+        // Close open brackets/braces
+        while (stack.Count > 0)
+            json += stack.Pop();
+
+        return json;
     }
 
     private static string CleanJsonResponse(string raw)

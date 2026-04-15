@@ -1,4 +1,5 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { clearToken } from '../api/http'
 
 const navItems: Array<{ to: string; label: string }> = [
   { to: '/orders', label: 'Orders' },
@@ -6,6 +7,13 @@ const navItems: Array<{ to: string; label: string }> = [
 ]
 
 export function AppLayout() {
+  const navigate = useNavigate()
+
+  const handleLogout = () => {
+    clearToken()
+    navigate('/login', { replace: true })
+  }
+
   return (
     <div className="appShell">
       <header className="topbar">
@@ -26,6 +34,9 @@ export function AppLayout() {
               {n.label}
             </NavLink>
           ))}
+          <button onClick={handleLogout} className="navLink" style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+            Logout
+          </button>
         </nav>
       </header>
 

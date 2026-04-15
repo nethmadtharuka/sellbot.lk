@@ -1,13 +1,15 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using SellBotLk.Api.Data;
 using SellBotLk.Api.Models.DTOs;
 using SellBotLk.Api.Models.Entities;
 using SellBotLk.Api.Services;
-using SellBotLk.Api.Data;
-using Microsoft.EntityFrameworkCore;
 
 namespace SellBotLk.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/v1/documents")]
 public class DocumentsController : ControllerBase
 {
