@@ -1,40 +1,40 @@
 # SellBot.lk
 
-> **Think Daraz or Kapruka — but the entire shopping experience happens inside WhatsApp.**
+> **Think [Daraz](https://www.daraz.lk) or [Kapruka](https://www.kapruka.com) — but the entire shopping experience happens inside WhatsApp.**
 
-Sri Lankan customers already live on WhatsApp. Instead of forcing them onto a website, SellBot.lk lets a furniture business sell directly through chat. Customers browse products, place orders, haggle on prices, snap a photo of a bank slip, and track delivery — all without leaving WhatsApp. The business owner manages everything from a React admin dashboard.
+In Sri Lanka, WhatsApp is how people communicate. SellBot.lk brings a furniture business directly into that conversation — customers browse products, place orders in natural language, negotiate prices, snap a photo of their bank slip for payment verification, and receive delivery updates, all without leaving the chat.
 
-Built as a full-stack capstone project demonstrating AI integration, webhook-driven architecture, and multi-language support.
+The business owner manages everything through a React admin dashboard.
 
 ---
 
 ## How It Works
 
 ```
-Customer (WhatsApp)                         Business Owner
-        │                                          │
-        │  "Do you have chairs?"                   │
-        ▼                                          │
-┌──────────────────────┐                  ┌────────────────────┐
-│   SellBotLk.Api      │                  │  Admin Dashboard   │
-│                      │     REST API     │  (React + TS)      │
-│  WhatsApp Webhook ◄──┼──────────────────┤                    │
-│  Gemini AI Engine    │                  │  Orders / Delivery │
-│  Order Pipeline      │                  │  Zone Management   │
-│  Payment Matching    │                  └────────────────────┘
-│  Delivery Tracking   │
-└──────────┬───────────┘
-           │
-      MySQL (EF Core)
+ Customer (WhatsApp)                          Business Owner
+         │                                          │
+         │  "Do you have chairs?"                   │
+         ▼                                          │
+ ┌───────────────────────┐                 ┌────────────────────┐
+ │    SellBotLk.Api      │                 │  Admin Dashboard   │
+ │                       │    REST API     │  (React + TS)      │
+ │  WhatsApp Webhook  ◄──┼────────────────►│                    │
+ │  Gemini AI Engine     │                 │  Orders            │
+ │  Order Pipeline       │                 │  Delivery Zones    │
+ │  Payment Matching     │                 └────────────────────┘
+ │  Delivery Tracking    │
+ └───────────┬───────────┘
+             │
+        MySQL (EF Core)
 ```
 
-**A typical customer journey:**
+**A real customer journey:**
 
 1. Customer sends *"මට chairs තියනවද?"* (Sinhala + English mix)
-2. Gemini detects language and intent → returns matching products with prices
-3. Customer replies *"I want 2 Oak Dining Chairs"* → order created, stock deducted
-4. Customer sends a bank transfer slip photo → Gemini Vision extracts amount, auto-matches to order
-5. Owner confirms from admin dashboard → customer gets WhatsApp delivery updates
+2. Gemini AI detects the language, classifies intent as product search, and returns matching products with prices
+3. Customer replies *"I want 2 Oak Dining Chairs"* — an order is created and stock is deducted
+4. Customer photographs their bank transfer slip and sends it — Gemini Vision extracts the amount and auto-matches it to the unpaid order
+5. Owner updates status from the admin dashboard — customer receives a WhatsApp delivery notification
 
 ---
 
@@ -43,56 +43,50 @@ Customer (WhatsApp)                         Business Owner
 | Layer | Technology |
 |-------|-----------|
 | Backend | ASP.NET Core 8, C# |
-| AI | Google Gemini 2.5 Flash (text parsing + vision) |
-| Messaging | Meta WhatsApp Cloud API (webhooks + Graph API) |
-| Database | MySQL 8 + Entity Framework Core (Pomelo) |
-| Frontend | React 19 + TypeScript + Vite 8 |
-| CI/CD | GitHub Actions |
-| Testing | xUnit + Moq + FluentAssertions |
+| AI | Google Gemini 2.5 Flash — text intent parsing, product matching, and multimodal vision |
+| Messaging | Meta WhatsApp Cloud API — inbound webhooks + outbound messages via Graph API |
+| Database | MySQL 8 with Entity Framework Core (Pomelo provider) |
+| Frontend | React 19, TypeScript, Vite 8 |
+| Testing | xUnit, Moq, FluentAssertions (17 tests) |
+| CI | GitHub Actions — build, lint, and test on every push |
 
 ---
 
 ## Features
 
-### WhatsApp Bot
+### Conversational Commerce (WhatsApp Bot)
 
-| Feature | Description |
-|---------|-------------|
-| **Conversational commerce** | Natural language ordering — *"I want 2 chairs and a table"* creates an order |
-| **Multi-language** | Auto-detects English, Sinhala, and Tamil — replies in the customer's language |
-| **AI product search** | *"Do you have something modern and red?"* → Gemini matches against real catalogue |
-| **Visual search** | Customer sends a photo of furniture → Gemini Vision extracts attributes → finds similar products |
-| **Price negotiation** | Customers can haggle — bot checks against minimum price and bulk discount rules |
-| **Payment verification** | Customer sends bank slip photo → Gemini Vision extracts amount → auto-matches to unpaid order |
-| **Delivery notifications** | Status changes (dispatched, delivered) trigger WhatsApp messages to customer |
-| **Document processing** | PDF invoices and receipts parsed via Gemini Vision for data extraction |
+- **Natural language ordering** — Customers type what they want in plain language; Gemini AI parses intent and creates orders against the real product catalogue
+- **Tri-lingual support** — Auto-detects and responds in English, Sinhala, or Tamil, including mixed-language messages like *"chair ekak denna"*
+- **AI-powered product search** — *"Do you have something modern and red?"* triggers a Gemini-backed search that scores and returns the top matches from the catalogue
+- **Visual product search** — Customer sends a furniture photo; Gemini Vision extracts attributes (type, color, material, style) and the system matches them against catalogue products using weighted scoring
+- **Price negotiation** — Customers can haggle; the bot evaluates offers against minimum price rules and bulk discount tiers, then accepts, counters, or rejects
+- **Payment slip verification** — Customer sends a bank slip photo; Gemini Vision extracts the transfer amount and reference; the system auto-matches it to the correct unpaid order within a configurable tolerance
+- **Delivery status notifications** — WhatsApp messages are sent to the customer when their order moves to Processing, Dispatched, or Delivered
+- **Document processing** — Supplier invoices and payment slips are processed through Gemini Vision for structured data extraction; supplier invoices trigger automatic inventory restocking
 
-### Admin Dashboard
+### Admin Dashboard (React)
 
-| Page | What it does |
-|------|-------------|
-| **Orders** | Filter by status/customer, view order list with payment and status badges |
-| **Order Details** | Line items, totals, fraud flags; update status, delivery status + driver notes, cancel |
-| **Delivery Zones** | Manage zones with fees, ETAs, free-delivery thresholds; check serviceability |
+- **Orders list** — Filter by status and customer ID; color-coded badges for order and payment status
+- **Order details** — Full breakdown with line items, totals, delivery info, and fraud flags; actions to update status, set delivery status with driver notes, or cancel (with automatic stock restoration)
+- **Delivery zones** — View all 25 seeded Sri Lankan zones with fees and ETAs; built-in serviceability checker that calculates delivery cost and free-delivery eligibility for a given area and order total
 
-### API
+### API (25 endpoints)
 
-| Area | Endpoints |
-|------|-----------|
-| Products | CRUD, low-stock alerts, AI smart search, visual search |
-| Orders | Create, filter, status updates, delivery pipeline, cancellation with stock restore |
-| Documents | Upload and process invoices/slips with Gemini Vision |
-| Delivery Zones | Zone listing, serviceability + fee calculator |
-| Webhook | WhatsApp verification + inbound message handler |
-| Health | `/health` endpoint |
+- **Products** — Full CRUD, low-stock alerts, AI-powered smart search, multimodal visual search
+- **Orders** — Create, list/filter, status transitions, delivery pipeline updates, cancellation with stock rollback
+- **Documents** — Upload and process via Gemini Vision (invoices, payment slips, damage reports)
+- **Delivery Zones** — Zone listing and serviceability/fee calculation with Gemini fuzzy area-name matching
+- **WhatsApp Webhook** — Meta verification handshake + inbound message/event handler
+- **Health** — `GET /health`
 
-### Security & Reliability
+### Security and Reliability
 
-- **HMAC-SHA256** verification on all inbound webhooks (Meta `X-Hub-Signature-256`)
-- **Global error handling** with RFC 9110 ProblemDetails responses
-- **Per-message error isolation** — one bad message doesn't kill the batch
-- **Gemini retry with exponential backoff** — 3 attempts before fallback
-- **Always returns 200 to Meta** — prevents webhook retry storms
+- **HMAC-SHA256 webhook verification** — Every inbound `POST` is verified against Meta's `X-Hub-Signature-256` header before reaching the controller
+- **Global error handling** — Unhandled exceptions return structured RFC 9110 ProblemDetails JSON instead of leaking stack traces
+- **Per-message error isolation** — A failure processing one message in a webhook batch does not prevent others from being processed
+- **Gemini retry with backoff** — API calls retry up to 3 times with exponential backoff before falling back to a safe default response
+- **Always returns 200 to Meta** — Prevents Meta from disabling the webhook due to repeated error responses
 
 ---
 
@@ -100,21 +94,21 @@ Customer (WhatsApp)                         Business Owner
 
 ```
 SellBotLk/
-├── SellBotLk.Api/                 # ASP.NET Core backend
-│   ├── Controllers/               # REST endpoints (Products, Orders, Documents, DeliveryZones)
-│   ├── Webhooks/                  # WhatsApp webhook handler
-│   ├── Services/                  # Business logic (11 services)
-│   ├── Integrations/Gemini/       # Gemini AI text + vision
-│   ├── Middleware/                # HMAC verification
-│   ├── Models/                    # Entities + DTOs
-│   └── Data/                      # EF Core DbContext, repositories, migrations
-├── sellbotlk-admin/               # React admin dashboard
+├── SellBotLk.Api/
+│   ├── Controllers/          Products, Orders, Documents, DeliveryZones
+│   ├── Webhooks/             WhatsApp inbound handler
+│   ├── Services/             11 domain services
+│   ├── Integrations/         Gemini text + Gemini Vision (2 clients)
+│   ├── Middleware/            HMAC signature verification
+│   ├── Models/               Entities (9 tables) + DTOs
+│   └── Data/                 DbContext, repositories, EF migrations + seed data
+├── sellbotlk-admin/
 │   └── src/
-│       ├── pages/                 # Orders, OrderDetails, DeliveryZones
-│       ├── components/            # UI kit, layout
-│       └── api/                   # API client
-├── SellBotLk.Tests/               # Unit tests (17 tests)
-└── .github/workflows/ci.yml       # CI pipeline
+│       ├── pages/            Orders, OrderDetails, DeliveryZones
+│       ├── components/       Reusable UI components + layout shell
+│       └── api/              Typed API client
+├── SellBotLk.Tests/          17 unit tests
+└── .github/workflows/        CI pipeline
 ```
 
 ---
@@ -126,85 +120,23 @@ SellBotLk/
 - .NET 8 SDK
 - Node.js 20+
 - MySQL 8
-- A [Meta WhatsApp Business](https://developers.facebook.com/docs/whatsapp/cloud-api/get-started) app (for webhook + messaging)
-- A [Google Gemini API key](https://ai.google.dev/)
+- [Meta WhatsApp Business](https://developers.facebook.com/docs/whatsapp/cloud-api/get-started) app
+- [Google Gemini API key](https://ai.google.dev/)
 
-### 1) API
+### API
 
 ```bash
-# Copy environment template and fill in your keys
-cp SellBotLk.Api/.env.example SellBotLk.Api/.env
-
-# Or configure appsettings.Development.json (gitignored)
-
+cp SellBotLk.Api/.env.example SellBotLk.Api/.env   # fill in your keys
 cd SellBotLk.Api
-dotnet run
+dotnet run                                           # http://localhost:5028 — Swagger in dev
 ```
 
-API runs at `http://localhost:5028` — Swagger UI available in Development.
-
-### 2) Admin Dashboard
+### Admin Dashboard
 
 ```bash
 cd sellbotlk-admin
-cp .env.example .env          # default points to localhost:5028
-npm install
-npm run dev
+cp .env.example .env       # defaults to http://localhost:5028
+npm install && npm run dev  # http://localhost:5173
 ```
 
-Dashboard runs at `http://localhost:5173`.
-
-### Environment Variables
-
-<details>
-<summary>API (.env.example)</summary>
-
-| Variable | Description |
-|----------|-------------|
-| `GEMINI_API_KEY` | Google Gemini API key |
-| `WHATSAPP_TOKEN` | Meta WhatsApp permanent token |
-| `WHATSAPP_VERIFY_TOKEN` | Custom webhook verification token |
-| `WHATSAPP_PHONE_NUMBER_ID` | WhatsApp business phone number ID |
-| `DB_CONNECTION_STRING` | MySQL connection string |
-| `JWT_SECRET` | JWT signing key (32+ chars) |
-| `OWNER_PHONE` | Business owner's WhatsApp number |
-
-</details>
-
-<details>
-<summary>Admin (.env.example)</summary>
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `VITE_API_BASE_URL` | `http://localhost:5028` | API base URL |
-
-</details>
-
----
-
-## CI
-
-GitHub Actions runs on every push and PR:
-
-| Job | Steps |
-|-----|-------|
-| **Admin** | `npm ci` → `npm run build` → `npm run lint` |
-| **API** | `dotnet restore` → `dotnet build` → `dotnet test` (17 tests) |
-
----
-
-## Database Schema
-
-9 tables managed via EF Core migrations:
-
-| Table | Purpose |
-|-------|---------|
-| `Customers` | Phone, name, language preference, order history |
-| `Products` | Catalogue with pricing, stock, bulk discounts, attributes |
-| `Orders` | Order lifecycle, payment status, fraud flags |
-| `OrderItems` | Line items with negotiated pricing |
-| `Conversations` | Per-customer chat state for context-aware AI |
-| `Documents` | Processed invoices and payment slips |
-| `DeliveryZones` | Areas with fees, ETAs, free-delivery thresholds |
-| `InventoryLogs` | Stock change audit trail |
-| `DailyReports` | Business metrics snapshots |
+See [`.env.example`](SellBotLk.Api/.env.example) for the full list of required environment variables.
