@@ -62,9 +62,23 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseExceptionHandler(error =>
+{
+    error.Run(async context =>
+    {
+        context.Response.StatusCode = 500;
+        context.Response.ContentType = "application/problem+json";
+        await context.Response.WriteAsJsonAsync(new
+        {
+            type = "https://tools.ietf.org/html/rfc9110#section-15.6.1",
+            title = "An unexpected error occurred.",
+            status = 500
+        });
+    });
+});
+
 app.UseCors("AdminDashboard");
 app.UseMiddleware<HmacVerificationMiddleware>();
-app.UseAuthorization();
 app.MapControllers();
 app.MapHealthChecks("/health");
 
