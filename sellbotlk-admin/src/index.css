@@ -252,3 +252,60 @@ th {
 tr:hover td {
   background: rgba(255, 255, 255, 0.03);
 }
+
+.statGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+
+@media (max-width: 800px) {
+  .statGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.statCard {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  background: var(--panel);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+.statCard.brand {
+  border-color: rgba(96, 165, 250, 0.35);
+  background: rgba(96, 165, 250, 0.08);
+}
+
+.statCard.good {
+  border-color: rgba(52, 211, 153, 0.35);
+  background: rgba(52, 211, 153, 0.08);
+}
+
+.statCard.warn {
+  border-color: rgba(251, 191, 36, 0.35);
+  background: rgba(251, 191, 36, 0.08);
+}
+
+.statCard.bad {
+  border-color: rgba(251, 113, 133, 0.35);
+  background: rgba(251, 113, 133, 0.08);
+}
+
+.statLabel {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.statValue {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.statSub {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+}

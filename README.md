@@ -2,9 +2,9 @@
 
 > **Think [Daraz](https://www.daraz.lk) or [Kapruka](https://www.kapruka.com) -- but the entire shopping experience happens inside WhatsApp.**
 
-In Sri Lanka, WhatsApp is how people communicate. SellBot.lk brings a furniture business directly into that conversation -- customers browse products, place orders in natural language, negotiate prices, snap a photo of their bank slip for payment verification, and receive delivery updates, all without leaving the chat.
+In Sri Lanka, WhatsApp is how people communicate. SellBot.lk brings a furniture business directly into that conversation -- customers browse products with photos, place orders in natural language, negotiate prices, snap a photo of their bank slip for payment verification, receive a PDF invoice, and get delivery updates, all without leaving the chat.
 
-The business owner manages everything through a React admin dashboard with JWT-secured API access.
+The business owner manages everything through a React admin dashboard with real-time analytics and JWT-secured API access.
 
 ---
 
@@ -19,10 +19,10 @@ The business owner manages everything through a React admin dashboard with JWT-s
  |      SellBotLk.Api        |             |  Admin Dashboard    |
  |                           |   REST API  |  (React + TS)       |
  |  WhatsApp Webhook      <--+------------>|                     |
- |  Gemini AI Engine         |   (JWT)     |  Login              |
+ |  Gemini AI Engine         |   (JWT)     |  Analytics          |
  |  Order Pipeline           |             |  Orders             |
  |  Payment Matching         |             |  Delivery Zones     |
- |  Delivery Tracking        |             +---------------------+
+ |  Invoice Generation       |             +---------------------+
  +-------------+-------------+
                |
           MySQL (EF Core)
@@ -32,10 +32,13 @@ The business owner manages everything through a React admin dashboard with JWT-s
 
 1. Customer sends *"chair ekak denna"* (Sinhala + English mix)
 2. Gemini AI detects the language, classifies intent as product search, and returns matching products with prices
-3. Customer replies *"I want 2 Oak Dining Chairs"* -- an order is created and stock is deducted
-4. Bot sends an interactive WhatsApp message with **[Track Order]** and **[Cancel Order]** buttons
-5. Customer photographs their bank transfer slip and sends it -- Gemini Vision extracts the amount and auto-matches it to the unpaid order
-6. Owner updates status from the admin dashboard -- customer receives a WhatsApp delivery notification
+3. Bot sends **product images** alongside the text results -- each with a caption showing name and price
+4. Customer replies *"I want 2 Oak Dining Chairs"* -- an order is created, stock is deducted, and **bank transfer instructions** are included in the confirmation
+5. Bot sends an interactive WhatsApp message with **[Track Order]** and **[Cancel Order]** buttons
+6. Customer photographs their bank transfer slip and sends it -- Gemini Vision extracts the amount and auto-matches it to the unpaid order
+7. Bot confirms the payment and sends a **PDF invoice** as a WhatsApp document
+8. Customer can later say *"order the same as last time"* to **reorder** their previous order instantly
+9. Owner monitors analytics and updates delivery status from the admin dashboard -- customer receives WhatsApp notifications
 
 ---
 
@@ -45,9 +48,10 @@ The business owner manages everything through a React admin dashboard with JWT-s
 |-------|------------|
 | Backend | ASP.NET Core 8, C# |
 | AI | Google Gemini 2.5 Flash -- text intent parsing, product matching, multimodal vision |
-| Messaging | Meta WhatsApp Cloud API -- inbound webhooks + outbound messages (text, interactive buttons, typing indicator) |
+| Messaging | Meta WhatsApp Cloud API -- inbound webhooks + outbound messages (text, images, documents, interactive buttons, typing indicator) |
 | Database | MySQL 8 with Entity Framework Core (Pomelo) |
-| Frontend | React 19, TypeScript 6, Vite 8 |
+| PDF Generation | QuestPDF -- auto-generated invoices sent via WhatsApp |
+| Frontend | React 19, TypeScript 6, Vite 8, Recharts |
 | Auth | JWT Bearer tokens (admin API), HMAC-SHA256 (webhook verification) |
 | Testing | xUnit, Moq, FluentAssertions |
 | CI | GitHub Actions -- build, lint, test on every push |
@@ -62,10 +66,13 @@ The business owner manages everything through a React admin dashboard with JWT-s
 |---------|-------------|
 | Natural language ordering | Customers type what they want in plain language; Gemini AI parses intent and creates orders against the real product catalogue |
 | Tri-lingual support | Auto-detects and responds in English, Sinhala, or Tamil, including mixed-language messages |
-| AI-powered product search | *"Do you have something modern and red?"* triggers a Gemini-backed search that scores and returns top matches |
+| Product images | Search results include product photos sent as individual WhatsApp image messages with price captions |
+| AI-powered product search | *"Do you have something modern and red?"* triggers a Gemini-backed search that returns the most relevant matches from the catalogue |
 | Visual product search | Customer sends a furniture photo; Gemini Vision extracts attributes and the system matches them against catalogue products using weighted scoring |
 | Price negotiation | Customers can haggle; the bot evaluates offers against minimum price rules and bulk discount tiers, then accepts, counters, or rejects |
-| Payment slip verification | Customer sends a bank slip photo; Gemini Vision extracts the transfer amount and reference; the system auto-matches it to the correct unpaid order |
+| Payment flow | Order confirmations include bank transfer instructions; customer sends a bank slip photo; Gemini Vision auto-matches it to the correct unpaid order |
+| PDF invoices | After payment verification, a professional PDF invoice is generated with QuestPDF and sent as a WhatsApp document |
+| Reorder | Returning customers can say *"order the same as last time"* to instantly re-create their most recent order at current prices |
 | Interactive order buttons | Order confirmations include WhatsApp interactive buttons for **Track Order** and **Cancel Order** |
 | Typing indicator | Bot shows a "typing..." indicator before every reply for a natural conversation feel |
 | Delivery notifications | WhatsApp messages sent when an order moves to Processing, Dispatched, or Delivered |
@@ -75,16 +82,17 @@ The business owner manages everything through a React admin dashboard with JWT-s
 
 | Page | Description |
 |------|-------------|
-| Login | JWT-authenticated login gate; tokens stored in browser, auto-redirect on 401 |
+| Analytics Dashboard | KPI cards (orders, revenue, paid/unpaid), revenue-over-time area chart, top products bar chart, orders-by-status pie chart, recent orders table; date range filtering (Recharts) |
 | Orders | Filter by status and customer; color-coded badges for order and payment status |
 | Order Details | Line items, totals, delivery info, fraud flags; actions to update status, set delivery with driver notes, or cancel (with automatic stock restoration) |
 | Delivery Zones | 25 Sri Lankan zones with fees and ETAs; built-in serviceability checker for delivery cost and free-delivery eligibility |
 
-### API -- 23 Endpoints
+### API -- 26 Endpoints
 
 | Group | Endpoints |
 |-------|-----------|
 | Auth | `POST /login` -- returns JWT token |
+| Analytics | `GET /analytics/summary` -- aggregated metrics with date range filtering |
 | Products | CRUD, low-stock alerts, AI smart search, visual search |
 | Orders | Create, list/filter, status transitions, delivery pipeline, cancellation with stock rollback |
 | Documents | Upload and process via Gemini Vision (invoices, payment slips, damage reports) |
@@ -110,17 +118,17 @@ The business owner manages everything through a React admin dashboard with JWT-s
 ```
 SellBotLk/
 ├── SellBotLk.Api/
-│   ├── Controllers/          Auth, Products, Orders, Documents, DeliveryZones
+│   ├── Controllers/          Auth, Analytics, Products, Orders, Documents, DeliveryZones
 │   ├── Webhooks/             WhatsApp inbound handler
-│   ├── Services/             11 domain services
+│   ├── Services/             14 domain services (incl. InvoiceService, AnalyticsService)
 │   ├── Integrations/         GeminiService, GeminiVisionService
 │   ├── Middleware/            HMAC signature verification
 │   ├── Models/               Entities (9 tables) + DTOs
 │   └── Data/                 DbContext, repositories, EF migrations + seed data
 ├── sellbotlk-admin/
 │   └── src/
-│       ├── pages/            Login, Orders, OrderDetails, DeliveryZones
-│       ├── components/       Reusable UI components + layout shell
+│       ├── pages/            Dashboard, Orders, OrderDetails, DeliveryZones, Login
+│       ├── components/       Reusable UI components, StatCard, layout shell
 │       └── api/              Typed API client with JWT interceptor
 ├── SellBotLk.Tests/          17 unit tests (HMAC, formatting, Gemini parsing, DTO deserialization)
 └── .github/workflows/        CI pipeline
@@ -143,6 +151,7 @@ SellBotLk/
 ```bash
 cp SellBotLk.Api/.env.example SellBotLk.Api/.env   # fill in your keys
 cd SellBotLk.Api
+dotnet ef database update                            # create/migrate the database
 dotnet run                                           # http://localhost:5028 -- Swagger UI in dev
 ```
 

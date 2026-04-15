@@ -176,6 +176,7 @@ public class AppDbContext : DbContext
                 StockQty = 20, LowStockThreshold = 5,
                 Color = "Black", Material = "Leather", Style = "Modern",
                 Description = "Ergonomic executive chair with lumbar support, armrests, and height adjustment.",
+                ImageUrl = "https://images.unsplash.com/photo-1580480055273-228ff5388ef8?w=600",
                 IsActive = true, CreatedAt = now
             },
             new Product
@@ -186,6 +187,7 @@ public class AppDbContext : DbContext
                 StockQty = 8, LowStockThreshold = 2,
                 Color = "Natural Wood", Material = "Solid Teak", Style = "Traditional",
                 Description = "Hand-crafted solid teak dining table, seats 6 comfortably. Includes protective lacquer finish.",
+                ImageUrl = "https://images.unsplash.com/photo-1617806118233-18e1de247200?w=600",
                 IsActive = true, CreatedAt = now
             },
             new Product
@@ -196,6 +198,7 @@ public class AppDbContext : DbContext
                 StockQty = 12, LowStockThreshold = 3,
                 Color = "Grey", Material = "Fabric", Style = "Scandinavian",
                 Description = "Comfortable 3-seater sofa with removable cushion covers. Available in grey and beige.",
+                ImageUrl = "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=600",
                 IsActive = true, CreatedAt = now
             },
             new Product
@@ -206,6 +209,7 @@ public class AppDbContext : DbContext
                 StockQty = 15, LowStockThreshold = 4,
                 Color = "White", Material = "MDF + Steel", Style = "Modern",
                 Description = "Spacious office desk with cable management and storage shelf. 140cm wide.",
+                ImageUrl = "https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?w=600",
                 IsActive = true, CreatedAt = now
             },
             new Product
@@ -216,6 +220,7 @@ public class AppDbContext : DbContext
                 StockQty = 25, LowStockThreshold = 6,
                 Color = "Walnut", Material = "Engineered Wood", Style = "Industrial",
                 Description = "5-tier open bookshelf with metal side supports. Easy self-assembly.",
+                ImageUrl = "https://images.unsplash.com/photo-1594620302200-9a762244a156?w=600",
                 IsActive = true, CreatedAt = now
             }
         );

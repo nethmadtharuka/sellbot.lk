@@ -68,3 +68,40 @@ export type UpdateDeliveryStatusDto = {
   driverNote?: string | null
 }
 
+export type AnalyticsSummaryDto = {
+  totalOrders: number
+  totalRevenue: number
+  paidOrders: number
+  unpaidOrders: number
+  ordersByStatus: StatusCountDto[]
+  revenueByDay: RevenueByDayDto[]
+  topProducts: TopProductDto[]
+  recentOrders: RecentOrderDto[]
+}
+
+export type StatusCountDto = {
+  status: string
+  count: number
+}
+
+export type RevenueByDayDto = {
+  date: string
+  revenue: number
+  orders: number
+}
+
+export type TopProductDto = {
+  productName: string
+  unitsSold: number
+  revenue: number
+}
+
+export type RecentOrderDto = {
+  orderNumber: string
+  customerName: string
+  status: string
+  paymentStatus: string
+  totalAmount: number
+  createdAt: string
+}
+

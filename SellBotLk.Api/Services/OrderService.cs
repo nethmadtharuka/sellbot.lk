@@ -9,17 +9,20 @@ public class OrderService
     private readonly OrderRepository _orderRepository;
     private readonly ProductRepository _productRepository;
     private readonly OrderNumberGenerator _orderNumberGenerator;
+    private readonly IConfiguration _config;
     private readonly ILogger<OrderService> _logger;
 
     public OrderService(
         OrderRepository orderRepository,
         ProductRepository productRepository,
         OrderNumberGenerator orderNumberGenerator,
+        IConfiguration config,
         ILogger<OrderService> logger)
     {
         _orderRepository = orderRepository;
         _productRepository = productRepository;
         _orderNumberGenerator = orderNumberGenerator;
+        _config = config;
         _logger = logger;
     }
 
@@ -188,7 +191,8 @@ public class OrderService
     }
 
     /// <summary>
-    /// Formats a confirmed order as a WhatsApp confirmation message.
+    /// Formats a confirmed order as a WhatsApp confirmation message
+    /// including bank transfer instructions so the customer knows how to pay.
     /// </summary>
     public string FormatOrderConfirmationMessage(OrderResponseDto order)
     {
@@ -208,12 +212,21 @@ public class OrderService
             lines.Add($"\n🏷️ Discount: -LKR {order.DiscountAmount:N0}");
 
         lines.Add($"\n💰 *Total: LKR {order.TotalAmount:N0}*");
-        lines.Add($"💳 Payment: {order.PaymentStatus}");
 
         if (!string.IsNullOrEmpty(order.DeliveryArea))
             lines.Add($"🚚 Delivery to: {order.DeliveryArea}");
 
-        lines.Add($"\nThank you for your order! 🙏");
+        var bankName = _config["Payment:BankName"] ?? "Bank of Ceylon";
+        var accountNumber = _config["Payment:AccountNumber"] ?? "0000000000";
+        var accountHolder = _config["Payment:AccountHolder"] ?? "SellBot.lk";
+
+        lines.Add($"\n💳 *To complete your order:*");
+        lines.Add($"1. Transfer LKR {order.TotalAmount:N0} to:");
+        lines.Add($"   Bank: *{bankName}*");
+        lines.Add($"   Account: *{accountNumber}*");
+        lines.Add($"   Name: *{accountHolder}*");
+        lines.Add($"2. Send a screenshot of your payment slip here");
+        lines.Add($"\nYour order will be confirmed once we verify the payment. 🙏");
 
         return string.Join("\n", lines);
     }

@@ -13,6 +13,8 @@ public class PaymentMatchingService
     private readonly GeminiVisionService _visionService;
     private readonly WhatsAppSendService _whatsAppSendService;
     private readonly DeliveryService _deliveryService;
+    private readonly InvoiceService _invoiceService;
+    private readonly OrderService _orderService;
     private readonly IConfiguration _config;
     private readonly ILogger<PaymentMatchingService> _logger;
 
@@ -21,6 +23,8 @@ public class PaymentMatchingService
         GeminiVisionService visionService,
         WhatsAppSendService whatsAppSendService,
         DeliveryService deliveryService,
+        InvoiceService invoiceService,
+        OrderService orderService,
         IConfiguration config,
         ILogger<PaymentMatchingService> logger)
     {
@@ -28,6 +32,8 @@ public class PaymentMatchingService
         _visionService = visionService;
         _whatsAppSendService = whatsAppSendService;
         _deliveryService = deliveryService;
+        _invoiceService = invoiceService;
+        _orderService = orderService;
         _config = config;
         _logger = logger;
     }
@@ -213,6 +219,27 @@ public class PaymentMatchingService
             $"\n\nThank you! We'll start processing your order now. 🙏";
 
         await _whatsAppSendService.SendTextMessageAsync(fromPhone, confirmMsg);
+
+        // Generate and send PDF invoice
+        try
+        {
+            var orderDto = await _orderService.GetByOrderNumberAsync(order.OrderNumber);
+            if (orderDto != null)
+            {
+                var pdfBytes = _invoiceService.GenerateInvoicePdf(orderDto, payment.Reference);
+                var filename = $"SellBotLk-{order.OrderNumber}.pdf";
+                await _whatsAppSendService.SendDocumentMessageAsync(
+                    fromPhone,
+                    pdfBytes,
+                    filename,
+                    $"Your invoice for order {order.OrderNumber}. Payment is pending admin review.");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to generate/send invoice PDF for {OrderNumber}",
+                order.OrderNumber);
+        }
 
         // Notify owner
         await AlertOwnerAsync(

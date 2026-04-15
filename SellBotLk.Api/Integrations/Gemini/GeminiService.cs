@@ -229,7 +229,7 @@ public class GeminiService
 
         var jsonExample = """
             {
-              "intent": "Greeting/ProductSearch/Order/OrderStatus/PriceNegotiation/Complaint/DeliveryInfo/PaymentConfirmation/Other",
+              "intent": "Greeting/ProductSearch/Order/Reorder/OrderStatus/PriceNegotiation/Complaint/DeliveryInfo/PaymentConfirmation/Other",
               "language": "en or si or ta",
               "customerName": "extracted name if mentioned, else null",
               "orderItems": [{"productName": "exact name from catalogue", "quantity": 1, "offeredPrice": null}],
@@ -255,6 +255,7 @@ public class GeminiService
                $"Rules:\n" +
                $"- Customers may mix languages — e.g. 'chair ekak denna' is an Order intent in Sinhala\n" +
                $"- 'දෙන්න', 'ගන්න', 'order', 'want', 'need', 'buy' all indicate Order intent\n" +
+               $"- 'same as last time', 'order again', 'repeat my order', 'reorder', 'කලින් එකම', 'மீண்டும் ஆர்டர்' → Reorder intent\n" +
                $"- NEVER return intent=Other for a message that clearly wants a product or order\n" +
                $"- For OrderStatus, set orderNumber if the customer mentions ORD-XXXX\n" +
                $"- replyMessage must be in the detected language\n" +

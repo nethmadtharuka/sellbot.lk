@@ -55,6 +55,8 @@ builder.Services.AddScoped<VisualSearchService>();
 builder.Services.AddScoped<MessageProcessingService>();
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<NegotiationService>();
+builder.Services.AddSingleton<InvoiceService>();
+builder.Services.AddScoped<AnalyticsService>();
 // JWT Authentication
 var jwtSecret = builder.Configuration["Jwt:Secret"]
     ?? throw new InvalidOperationException("Jwt:Secret must be configured");
