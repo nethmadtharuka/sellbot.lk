@@ -52,7 +52,7 @@ export function Field(props: PropsWithChildren<{ label: string; hint?: string }>
   )
 }
 
-export function Table(props: PropsWithChildren<{}>) {
+export function Table(props: PropsWithChildren) {
   return <div className="tableWrap">{props.children}</div>
 }
 
