@@ -88,7 +88,7 @@ public class WhatsAppWebhookController : ControllerBase
             {
                 var senderName = contacts
                     .FirstOrDefault(c => c.WaId == message.From)
-                    ?.Profile.Name ?? "Unknown";
+                    ?.Profile?.Name ?? "Unknown";
 
                 _logger.LogInformation(
                     "Message received from {Phone} ({Name}) — Type: {Type}",

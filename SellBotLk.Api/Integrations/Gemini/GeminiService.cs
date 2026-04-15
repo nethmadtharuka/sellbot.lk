@@ -183,8 +183,20 @@ public class GeminiService
                 return new VisualSearchAttributes();
             }
 
-            var text = jsonDoc?["candidates"]?[0]?["content"]?["parts"]?[0]?["text"]
-                ?.GetValue<string>() ?? "";
+            var visionParts = jsonDoc?["candidates"]?[0]?["content"]?["parts"]?.AsArray();
+            var text = "";
+            if (visionParts != null)
+            {
+                for (var i = visionParts.Count - 1; i >= 0; i--)
+                {
+                    var isThought = visionParts[i]?["thought"]?.GetValue<bool>() ?? false;
+                    if (!isThought)
+                    {
+                        text = visionParts[i]?["text"]?.GetValue<string>() ?? "";
+                        break;
+                    }
+                }
+            }
 
             var cleaned = CleanJsonResponse(text);
             var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
@@ -321,8 +333,24 @@ public class GeminiService
                 return BuildFallbackJson();
             }
 
-            var text = candidates[0]?["content"]?["parts"]?[0]?["text"]
-                ?.GetValue<string>() ?? "";
+            // Gemini 2.5 "thinking" models return multiple parts:
+            //   parts[0] = { "thought": true, "text": "<reasoning>" }
+            //   parts[1] = { "text": "<actual response>" }
+            // We need the last non-thought text part.
+            var parts = candidates[0]?["content"]?["parts"]?.AsArray();
+            if (parts == null || parts.Count == 0)
+                return BuildFallbackJson();
+
+            var text = "";
+            for (var i = parts.Count - 1; i >= 0; i--)
+            {
+                var isThought = parts[i]?["thought"]?.GetValue<bool>() ?? false;
+                if (!isThought)
+                {
+                    text = parts[i]?["text"]?.GetValue<string>() ?? "";
+                    break;
+                }
+            }
 
             return text;
         }

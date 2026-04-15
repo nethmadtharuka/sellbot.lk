@@ -42,6 +42,10 @@ public class WhatsAppValueDto
 
     [JsonPropertyName("messages")]
     public List<WhatsAppMessageItemDto>? Messages { get; set; }
+
+    // Status callbacks (e.g., sent/delivered/read) come through here, often without `messages`.
+    [JsonPropertyName("statuses")]
+    public List<WhatsAppStatusDto>? Statuses { get; set; }
 }
 
 public class WhatsAppMetadataDto
@@ -56,16 +60,38 @@ public class WhatsAppMetadataDto
 public class WhatsAppContactDto
 {
     [JsonPropertyName("profile")]
-    public WhatsAppProfileDto Profile { get; set; } = null!;
+    public WhatsAppProfileDto? Profile { get; set; }
 
     [JsonPropertyName("wa_id")]
     public string WaId { get; set; } = null!;
+
+    // Some payloads include this instead of profile details.
+    [JsonPropertyName("user_id")]
+    public string? UserId { get; set; }
 }
 
 public class WhatsAppProfileDto
 {
     [JsonPropertyName("name")]
-    public string Name { get; set; } = null!;
+    public string? Name { get; set; }
+}
+
+public class WhatsAppStatusDto
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = null!;
+
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = null!;
+
+    [JsonPropertyName("timestamp")]
+    public string? Timestamp { get; set; }
+
+    [JsonPropertyName("recipient_id")]
+    public string? RecipientId { get; set; }
+
+    [JsonPropertyName("recipient_user_id")]
+    public string? RecipientUserId { get; set; }
 }
 
 public class WhatsAppMessageItemDto
