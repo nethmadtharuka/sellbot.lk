@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SellBotLk.Api.Models.DTOs;
 using SellBotLk.Api.Services;
@@ -5,6 +6,7 @@ using SellBotLk.Api.Services;
 namespace SellBotLk.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/v1/products")]
 public class ProductsController : ControllerBase
 {

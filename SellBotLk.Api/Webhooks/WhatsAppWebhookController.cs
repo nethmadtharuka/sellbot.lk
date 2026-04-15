@@ -1,4 +1,6 @@
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using SellBotLk.Api.Data;
 using SellBotLk.Api.Models.DTOs;
@@ -9,6 +11,7 @@ namespace SellBotLk.Api.Webhooks;
 
 [ApiController]
 [Route("api/v1/webhook")]
+[EnableRateLimiting("webhook")]
 public class WhatsAppWebhookController : ControllerBase
 {
     private readonly IConfiguration _config;

@@ -3,11 +3,25 @@ import { AppLayout } from './components/AppLayout'
 import { OrdersPage } from './pages/OrdersPage'
 import { OrderDetailsPage } from './pages/OrderDetailsPage'
 import { DeliveryZonesPage } from './pages/DeliveryZonesPage'
+import { LoginPage } from './pages/LoginPage'
+import { getToken } from './api/http'
+
+function RequireAuth({ children }: { children: React.ReactNode }) {
+  if (!getToken()) return <Navigate to="/login" replace />
+  return <>{children}</>
+}
 
 export default function App() {
   return (
     <Routes>
-      <Route element={<AppLayout />}>
+      <Route path="/login" element={<LoginPage />} />
+      <Route
+        element={
+          <RequireAuth>
+            <AppLayout />
+          </RequireAuth>
+        }
+      >
         <Route path="/" element={<Navigate to="/orders" replace />} />
         <Route path="/orders" element={<OrdersPage />} />
         <Route path="/orders/:id" element={<OrderDetailsPage />} />
