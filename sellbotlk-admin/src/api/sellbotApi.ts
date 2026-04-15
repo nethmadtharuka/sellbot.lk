@@ -1,5 +1,6 @@
 import { apiGet, apiPost, apiPut, setToken } from './http'
 import type {
+  AnalyticsSummaryDto,
   ApiEnvelope,
   DeliveryCheckRequestDto,
   DeliveryCheckResponseDto,
@@ -41,5 +42,8 @@ export const sellbotApi = {
 
   checkDelivery: (dto: DeliveryCheckRequestDto) =>
     apiPost<ApiEnvelope<DeliveryCheckResponseDto>>(`/api/v1/delivery-zones/check`, dto),
+
+  getAnalytics: (from: string, to: string) =>
+    apiGet<ApiEnvelope<AnalyticsSummaryDto>>(`/api/v1/analytics/summary?from=${from}&to=${to}`),
 }
 

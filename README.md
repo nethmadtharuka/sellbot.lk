@@ -62,7 +62,7 @@ The business owner manages everything through a React admin dashboard with JWT-s
 |---------|-------------|
 | Natural language ordering | Customers type what they want in plain language; Gemini AI parses intent and creates orders against the real product catalogue |
 | Tri-lingual support | Auto-detects and responds in English, Sinhala, or Tamil, including mixed-language messages |
-| AI-powered product search | *"Do you have something modern and red?"* triggers a Gemini-backed search that scores and returns top matches |
+| AI-powered product search | *"Do you have something modern and red?"* triggers a Gemini-backed search that returns the most relevant matches from the catalogue |
 | Visual product search | Customer sends a furniture photo; Gemini Vision extracts attributes and the system matches them against catalogue products using weighted scoring |
 | Price negotiation | Customers can haggle; the bot evaluates offers against minimum price rules and bulk discount tiers, then accepts, counters, or rejects |
 | Payment slip verification | Customer sends a bank slip photo; Gemini Vision extracts the transfer amount and reference; the system auto-matches it to the correct unpaid order |
@@ -80,7 +80,7 @@ The business owner manages everything through a React admin dashboard with JWT-s
 | Order Details | Line items, totals, delivery info, fraud flags; actions to update status, set delivery with driver notes, or cancel (with automatic stock restoration) |
 | Delivery Zones | 25 Sri Lankan zones with fees and ETAs; built-in serviceability checker for delivery cost and free-delivery eligibility |
 
-### API -- 23 Endpoints
+### API -- 24 Endpoints
 
 | Group | Endpoints |
 |-------|-----------|

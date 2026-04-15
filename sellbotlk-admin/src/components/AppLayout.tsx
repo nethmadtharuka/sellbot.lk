@@ -2,6 +2,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { clearToken } from '../api/http'
 
 const navItems: Array<{ to: string; label: string }> = [
+  { to: '/', label: 'Dashboard' },
   { to: '/orders', label: 'Orders' },
   { to: '/delivery-zones', label: 'Delivery Zones' },
 ]
@@ -29,6 +30,7 @@ export function AppLayout() {
             <NavLink
               key={n.to}
               to={n.to}
+              end={n.to === '/'}
               className={({ isActive }) => `navLink ${isActive ? 'active' : ''}`}
             >
               {n.label}

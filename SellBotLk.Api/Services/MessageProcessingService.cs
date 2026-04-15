@@ -78,7 +78,7 @@ public class MessageProcessingService
             {
                 "Greeting"            => ConversationState.Greeting,
                 "ProductSearch"       => ConversationState.Browsing,
-                "Order"               => ConversationState.Ordering,
+                "Order" or "Reorder"  => ConversationState.Ordering,
                 "PriceNegotiation"    => ConversationState.Negotiating,
                 "Complaint"
                     or "OrderStatus"
@@ -129,8 +129,11 @@ public class MessageProcessingService
                         fromPhone, parsed, customer.Id, parsed.Language);
                     break;
 
+                case "Reorder":
+                    await HandleReorderAsync(fromPhone, customer.Id, parsed.Language);
+                    break;
+
                 case "PaymentConfirmation":
-                    // Customer typed a payment reference — tell them to send the slip image
                     await HandlePaymentTextAsync(fromPhone, parsed.Language);
                     break;
 
@@ -670,13 +673,131 @@ public class MessageProcessingService
         }
     }
 
-    // 🔍 PRODUCT SEARCH HANDLER
+    private async Task HandleReorderAsync(
+        string fromPhone, int customerId, string language)
+    {
+        var previousOrders = await _db.Orders
+            .Include(o => o.Items).ThenInclude(i => i.Product)
+            .Where(o => o.CustomerId == customerId && o.Status != OrderStatus.Cancelled)
+            .OrderByDescending(o => o.CreatedAt)
+            .ToListAsync();
+
+        var lastOrder = previousOrders.FirstOrDefault();
+
+        if (lastOrder == null)
+        {
+            var noOrderMsg = language switch
+            {
+                "si" => "ඔබට කලින් ඇණවුම් නොමැත. 'browse' ටයිප් කර භාණ්ඩ බලන්න!",
+                "ta" => "முந்தைய ஆர்டர்கள் இல்லை. 'browse' என்று தட்டச்சு செய்யுங்கள்!",
+                _ => "You don't have any previous orders to reorder.\nType 'browse' to see our products!"
+            };
+            await _whatsAppSendService.SendTextMessageAsync(fromPhone, noOrderMsg);
+            return;
+        }
+
+        var allProducts = await _productService.GetAllAsync();
+        var orderItems = new List<OrderItemDto>();
+        var unavailable = new List<string>();
+
+        foreach (var item in lastOrder.Items)
+        {
+            var product = allProducts.FirstOrDefault(p => p.Id == item.ProductId);
+            if (product == null || !product.IsActive)
+            {
+                unavailable.Add(item.Product?.Name ?? $"Product #{item.ProductId}");
+                continue;
+            }
+
+            orderItems.Add(new OrderItemDto
+            {
+                ProductId = product.Id,
+                Quantity = item.Quantity
+            });
+        }
+
+        if (!orderItems.Any())
+        {
+            var allGoneMsg = language switch
+            {
+                "si" => "සමාවෙන්න, ඔබේ කලින් ඇණවුමේ භාණ්ඩ දැන් නොලැබේ.\n'browse' ටයිප් කර නව භාණ්ඩ බලන්න.",
+                "ta" => "மன்னிக்கவும், உங்கள் முந்தைய பொருட்கள் தற்போது இல்லை.\n'browse' என்று புதிய பொருட்களை பாருங்கள்.",
+                _ => "Sorry, the items from your previous order are no longer available.\nType 'browse' to see what's in stock!"
+            };
+            await _whatsAppSendService.SendTextMessageAsync(fromPhone, allGoneMsg);
+            return;
+        }
+
+        if (unavailable.Any())
+        {
+            var partialMsg = language switch
+            {
+                "si" => $"⚠️ '{string.Join("', '", unavailable)}' දැන් නොලැබේ. ඉතිරි භාණ්ඩ ඇණවුම් කරනවා.",
+                "ta" => $"⚠️ '{string.Join("', '", unavailable)}' தற்போது இல்லை. மீதமுள்ளவை ஆர்டர் செய்கிறேன்.",
+                _ => $"⚠️ '{string.Join("', '", unavailable)}' are no longer available. Reordering the rest."
+            };
+            await _whatsAppSendService.SendTextMessageAsync(fromPhone, partialMsg);
+        }
+
+        try
+        {
+            var createDto = new CreateOrderDto
+            {
+                CustomerId = customerId,
+                Items = orderItems
+            };
+
+            var order = await _orderService.CreateOrderAsync(createDto);
+            var confirmationMsg = _orderService.FormatOrderConfirmationMessage(order);
+            await _whatsAppSendService.SendButtonMessageAsync(
+                fromPhone,
+                confirmationMsg,
+                new[]
+                {
+                    ($"track_{order.OrderNumber}", "Track Order"),
+                    ($"cancel_{order.OrderNumber}", "Cancel Order")
+                });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Reorder failed for customer {Id}", customerId);
+            var errorMsg = language switch
+            {
+                "si" => ex.Message.Contains("stock", StringComparison.OrdinalIgnoreCase)
+                    ? $"😔 සමාවෙන්න — {ex.Message}"
+                    : "😔 නැවත ඇණවුම් කිරීමේ දෝෂයකි. නැවත උත්සාහ කරන්න.",
+                "ta" => ex.Message.Contains("stock", StringComparison.OrdinalIgnoreCase)
+                    ? $"😔 மன்னிக்கவும் — {ex.Message}"
+                    : "😔 மீண்டும் ஆர்டர் செய்ய முடியவில்லை. மீண்டும் முயற்சிக்கவும்.",
+                _ => ex.Message.Contains("stock", StringComparison.OrdinalIgnoreCase)
+                    ? $"😔 Sorry — {ex.Message}"
+                    : "😔 Something went wrong reordering. Please try again!"
+            };
+            await _whatsAppSendService.SendTextMessageAsync(fromPhone, errorMsg);
+        }
+    }
+
     private async Task HandleProductSearchAsync(
         string fromPhone, string query, string language)
     {
         var products = await _productService.SmartSearchAsync(query);
         var message = _productService.FormatProductsForWhatsApp(products, language);
         await _whatsAppSendService.SendTextMessageAsync(fromPhone, message);
+
+        foreach (var product in products.Where(p => !string.IsNullOrEmpty(p.ImageUrl)))
+        {
+            try
+            {
+                await _whatsAppSendService.SendImageMessageAsync(
+                    fromPhone,
+                    product.ImageUrl!,
+                    $"{product.Name} — LKR {product.Price:N0}");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to send image for product {Id}", product.Id);
+            }
+        }
     }
 
     // 🔍 MULTI-STRATEGY PRODUCT MATCHING
