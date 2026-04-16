@@ -5,13 +5,16 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using SellBotLk.Api;
 using SellBotLk.Api.Data;
 using SellBotLk.Api.Data.Repositories;
 using SellBotLk.Api.Integrations.Gemini;
 using SellBotLk.Api.Middleware;
 using SellBotLk.Api.Services;
 
+LegacyEnvConfiguration.LoadLocalDotEnv();
 var builder = WebApplication.CreateBuilder(args);
+LegacyEnvConfiguration.ApplyFlatEnvAliases(builder.Configuration);
 
 builder.Services.AddCors(options =>
 {
@@ -25,6 +28,11 @@ builder.Services.AddCors(options =>
 });
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+if (string.IsNullOrWhiteSpace(connectionString))
+    throw new InvalidOperationException(
+        "Database connection is not configured. For local Development, set ConnectionStrings:DefaultConnection " +
+        "in appsettings.Development.json (replace YOUR_MYSQL_PASSWORD), or set DB_CONNECTION_STRING in SellBotLk.Api/.env, " +
+        "or use: dotnet user-secrets set \"ConnectionStrings:DefaultConnection\" \"Server=...\"");
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
 

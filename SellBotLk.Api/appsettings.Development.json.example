@@ -1,0 +1,40 @@
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=localhost;Database=sellbotlk;User=root;Password=YOUR_MYSQL_PASSWORD;CharSet=utf8mb4;"
+  },
+  "Gemini": {
+    "ApiKey": "YOUR_GEMINI_API_KEY",
+    "Model": "gemini-2.5-flash"
+  },
+  "WhatsApp": {
+    "Token": "YOUR_META_ACCESS_TOKEN",
+    "PhoneNumberId": "YOUR_PHONE_NUMBER_ID",
+    "VerifyToken": "YOUR_CUSTOM_VERIFY_TOKEN",
+    "AppSecret": "YOUR_META_APP_SECRET"
+  },
+  "Owner": {
+    "Phone": "94771234567"
+  },
+  "Jwt": {
+    "Secret": "YOUR_SECRET_KEY_MINIMUM_32_CHARACTERS_LONG"
+  },
+  "Admin": {
+    "Username": "admin",
+    "Password": "changeme"
+  },
+  "Hangfire": {
+    "DashboardUser": "admin",
+    "DashboardPassword": "changeme"
+  },
+  "Payment": {
+    "BankName": "Your Bank",
+    "AccountNumber": "0000000000",
+    "AccountHolder": "Your business name"
+  },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  }
+}

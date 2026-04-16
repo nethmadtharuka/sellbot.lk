@@ -288,7 +288,7 @@ public class PaymentMatchingService
 
     private async Task AlertOwnerAsync(string message)
     {
-        var ownerPhone = _config["OWNER_PHONE"];
+        var ownerPhone = _config["Owner:Phone"] ?? _config["OWNER_PHONE"];
         if (!string.IsNullOrEmpty(ownerPhone))
             await _whatsAppSendService.SendTextMessageAsync(ownerPhone, message);
     }

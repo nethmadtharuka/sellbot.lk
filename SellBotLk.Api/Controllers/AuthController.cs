@@ -24,8 +24,13 @@ public class AuthController : ControllerBase
     [HttpPost("login")]
     public IActionResult Login([FromBody] LoginRequest request)
     {
-        var adminUser = _config["Admin:Username"] ?? "admin";
-        var adminPass = _config["Admin:Password"] ?? "admin";
+        var adminUser = _config["Admin:Username"];
+        var adminPass = _config["Admin:Password"];
+
+        // Treat missing/empty config as defaults for local/demo usage.
+        // (appsettings.json may contain empty strings which should not disable login)
+        if (string.IsNullOrWhiteSpace(adminUser)) adminUser = "admin";
+        if (string.IsNullOrWhiteSpace(adminPass)) adminPass = "admin";
 
         if (request.Username != adminUser || request.Password != adminPass)
             return Unauthorized(new { message = "Invalid credentials" });
