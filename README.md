@@ -163,6 +163,6 @@ cp .env.example .env       # defaults to http://localhost:5028
 npm install && npm run dev  # http://localhost:5173
 ```
 
-Default admin login: `admin` / (set `ADMIN_PASSWORD` in your `.env`).
+Default admin login: `admin` / `admin` (override with `ADMIN_USERNAME` + `ADMIN_PASSWORD` in your `.env`).
 
 See [`.env.example`](SellBotLk.Api/.env.example) for the full list of required environment variables.

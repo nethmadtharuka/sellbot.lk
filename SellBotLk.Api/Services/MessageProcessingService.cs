@@ -111,7 +111,7 @@ public class MessageProcessingService
 
                 case "PriceNegotiation":
                     await HandleNegotiationAsync(
-                        fromPhone, parsed, customer.Id, parsed.Language);
+                        fromPhone, messageText, parsed, customer.Id, parsed.Language);
                     break;
 
                 case "OrderStatus":
@@ -459,6 +459,7 @@ public class MessageProcessingService
     // 💰 NEGOTIATION HANDLER
     private async Task HandleNegotiationAsync(
         string fromPhone,
+        string messageText,
         ParsedMessageIntent parsed,
         int customerId,
         string language)
@@ -467,8 +468,7 @@ public class MessageProcessingService
 
         if (existingContext != null &&
             parsed.Intent == "PriceNegotiation" &&
-            (parsed.ReplyMessage?.Contains("confirm",
-                StringComparison.OrdinalIgnoreCase) == true ||
+            (IsConfirmMessage(messageText) ||
              parsed.OfferedPrice == existingContext.CounterOffer))
         {
             var createDto = new CreateOrderDto
@@ -564,11 +564,32 @@ public class MessageProcessingService
                 }
             };
 
-            await _orderService.CreateOrderAsync(createDto);
+            var order = await _orderService.CreateOrderAsync(createDto);
             await _negotiationService.ClearNegotiationContextAsync(customerId);
+
+            var confirmMsg = _orderService.FormatOrderConfirmationMessage(order);
+            await _whatsAppSendService.SendButtonMessageAsync(
+                fromPhone,
+                confirmMsg,
+                new[]
+                {
+                    ($"track_{order.OrderNumber}", "Track Order"),
+                    ($"cancel_{order.OrderNumber}", "Cancel Order")
+                });
+            return;
         }
 
         await _whatsAppSendService.SendTextMessageAsync(fromPhone, result.Message);
+    }
+
+    private static bool IsConfirmMessage(string? messageText)
+    {
+        if (string.IsNullOrWhiteSpace(messageText)) return false;
+        var t = messageText.Trim();
+        return t.Equals("confirm", StringComparison.OrdinalIgnoreCase) ||
+               t.Equals("yes", StringComparison.OrdinalIgnoreCase) ||
+               t.Equals("ok", StringComparison.OrdinalIgnoreCase) ||
+               t.Contains("confirm", StringComparison.OrdinalIgnoreCase);
     }
 
     // 🛒 ORDER HANDLER
