@@ -36,13 +36,28 @@ public class HmacVerificationMiddleware
             var body = await new StreamReader(context.Request.Body).ReadToEndAsync();
             context.Request.Body.Position = 0;
 
-            var appSecret = config["WhatsApp:AppSecret"] ?? "";
+            // Meta signs the raw POST body with your *App secret* (App Dashboard → App settings → Basic).
+            // Common mistakes: using the access token, verify token, or phone number ID here; or a trailing
+            // newline in .env — trim below.
+            var appSecret = config["WhatsApp:AppSecret"]?.Trim() ?? "";
+            if (string.IsNullOrEmpty(appSecret))
+            {
+                _logger.LogWarning(
+                    "Webhook HMAC check failed: WhatsApp:AppSecret is not set. " +
+                    "Set it in appsettings, user secrets, or WHATSAPP_APP_SECRET / META_APP_SECRET in .env.");
+                context.Response.StatusCode = 401;
+                await context.Response.WriteAsync("App secret not configured");
+                return;
+            }
+
             var expectedSignature = ComputeHmac(body, appSecret);
 
             if (!signature.Equals($"sha256={expectedSignature}",
                 StringComparison.OrdinalIgnoreCase))
             {
-                _logger.LogWarning("Invalid HMAC signature on webhook request");
+                _logger.LogWarning(
+                    "Invalid HMAC on webhook: body signature does not match. " +
+                    "Confirm WhatsApp:AppSecret is the Meta *App secret* for this app (not the access token).");
                 context.Response.StatusCode = 401;
                 await context.Response.WriteAsync("Invalid signature");
                 return;

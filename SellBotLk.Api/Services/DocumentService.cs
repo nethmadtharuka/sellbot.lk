@@ -204,7 +204,7 @@ public class DocumentService
                           $"{document.TotalAmount:N0}";
 
             // Send to owner
-            var ownerPhone = _config["OWNER_PHONE"];
+            var ownerPhone = _config["Owner:Phone"] ?? _config["OWNER_PHONE"];
             if (!string.IsNullOrEmpty(ownerPhone))
                 await _whatsAppSendService.SendTextMessageAsync(
                     ownerPhone, summary);
@@ -308,7 +308,7 @@ public class DocumentService
                         fromPhone, mismatchMsg);
 
                 // Alert owner
-                var ownerPhone = _config["OWNER_PHONE"];
+                var ownerPhone = _config["Owner:Phone"] ?? _config["OWNER_PHONE"];
                 if (!string.IsNullOrEmpty(ownerPhone))
                     await _whatsAppSendService.SendTextMessageAsync(
                         ownerPhone,
@@ -375,7 +375,7 @@ public class DocumentService
                     { PropertyNameCaseInsensitive = true })
                 ?? new ExtractedDamageData();
 
-            var ownerPhone = _config["OWNER_PHONE"];
+            var ownerPhone = _config["Owner:Phone"] ?? _config["OWNER_PHONE"];
             if (!string.IsNullOrEmpty(ownerPhone))
             {
                 var ownerMsg =
