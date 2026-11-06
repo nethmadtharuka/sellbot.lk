@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SellBotLk.Api.Data;
+using SellBotLk.Api.Data.Repositories;
 using SellBotLk.Api.Integrations.Gemini;
 using SellBotLk.Api.Models.DTOs;
 using SellBotLk.Api.Models.Entities;
@@ -11,17 +12,23 @@ public class DeliveryService
     private readonly AppDbContext _db;
     private readonly GeminiService _geminiService;
     private readonly WhatsAppSendService _whatsAppSendService;
+    private readonly OrderService _orderService;
+    private readonly OrderRepository _orderRepository;
     private readonly ILogger<DeliveryService> _logger;
 
     public DeliveryService(
         AppDbContext db,
         GeminiService geminiService,
         WhatsAppSendService whatsAppSendService,
+        OrderService orderService,
+        OrderRepository orderRepository,
         ILogger<DeliveryService> logger)
     {
         _db = db;
         _geminiService = geminiService;
         _whatsAppSendService = whatsAppSendService;
+        _orderService = orderService;
+        _orderRepository = orderRepository;
         _logger = logger;
     }
 
@@ -140,14 +147,21 @@ public class DeliveryService
             return false;
         }
 
+        // Cancelling has to restore stock, so it uses the shared cancel path.
+        if (status == OrderStatus.Cancelled)
+            return await _orderService.CancelOrderAsync(orderId) != null;
+
         var previousStatus = order.Status;
-        order.Status = status;
-        order.UpdatedAt = DateTime.UtcNow;
+        var note = string.IsNullOrEmpty(driverNote) ? null : driverNote;
 
-        if (!string.IsNullOrEmpty(driverNote))
-            order.DriverNote = driverNote;
+        if (!await _orderRepository.TryUpdateStatusAsync(orderId, previousStatus, status, note))
+        {
+            _logger.LogWarning(
+                "Order {OrderId} changed during status update to {To}", orderId, status);
+            return false;
+        }
 
-        await _db.SaveChangesAsync();
+        await _db.Entry(order).ReloadAsync();
 
         _logger.LogInformation(
             "Order {OrderNumber} status updated: {From} → {To}",

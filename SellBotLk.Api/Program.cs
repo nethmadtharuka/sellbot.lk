@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using SellBotLk.Api;
+using SellBotLk.Api.Controllers;
 using SellBotLk.Api.Data;
 using SellBotLk.Api.Data.Repositories;
 using SellBotLk.Api.Integrations.Gemini;
@@ -53,7 +54,6 @@ builder.Services.AddScoped<WhatsAppSendService>();
 builder.Services.AddScoped<GeminiService>();
 builder.Services.AddScoped<GeminiVisionService>();
 builder.Services.AddScoped<MediaDownloadService>();
-builder.Services.AddScoped<OrderNumberGenerator>();
 builder.Services.AddScoped<ProductService>();
 builder.Services.AddScoped<OrderService>();
 builder.Services.AddScoped<DocumentService>();
@@ -65,9 +65,22 @@ builder.Services.AddMemoryCache();
 builder.Services.AddScoped<NegotiationService>();
 builder.Services.AddSingleton<InvoiceService>();
 builder.Services.AddScoped<AnalyticsService>();
+builder.Services.AddHostedService<MaintenanceService>();
+
+// Refuse to start with unsafe admin credentials: there are no defaults to fall back on.
+if (string.IsNullOrWhiteSpace(builder.Configuration["Admin:Username"]) ||
+    !AuthController.IsAcceptablePassword(builder.Configuration["Admin:Password"]))
+    throw new InvalidOperationException(
+        "Admin credentials are not configured. Set ADMIN_USERNAME and ADMIN_PASSWORD " +
+        $"(at least {AuthController.MinPasswordLength} characters) in SellBotLk.Api/.env, " +
+        "or Admin__Username and Admin__Password in the environment.");
+
 // JWT Authentication
-var jwtSecret = builder.Configuration["Jwt:Secret"]
-    ?? throw new InvalidOperationException("Jwt:Secret must be configured");
+var jwtSecret = builder.Configuration["Jwt:Secret"];
+if (string.IsNullOrWhiteSpace(jwtSecret) || Encoding.UTF8.GetByteCount(jwtSecret) < 32)
+    throw new InvalidOperationException(
+        "Jwt:Secret must be configured with at least 32 bytes (JWT_SECRET in .env).");
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -87,14 +100,40 @@ builder.Services.AddAuthorization();
 // Rate limiting
 builder.Services.AddRateLimiter(options =>
 {
+    // Overall safety valve for signed webhook traffic, status callbacks included.
+    // Meta retries a 429, so hitting it delays messages rather than losing them.
     options.AddFixedWindowLimiter("webhook", limiter =>
     {
-        limiter.PermitLimit = 60;
+        limiter.PermitLimit = 600;
         limiter.Window = TimeSpan.FromMinutes(1);
         limiter.QueueLimit = 0;
     });
+
+    // ponytail: partitions by client IP, so behind a reverse proxy add
+    // UseForwardedHeaders or every client shares one bucket.
+    options.AddPolicy("login", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
+
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 });
+
+// Per-sender limit, applied in the webhook controller because the sender's number
+// is inside the signed body. One noisy number can't use up everyone's capacity.
+// ponytail: per-process counters, move to a shared store if this runs on several instances.
+builder.Services.AddSingleton(PartitionedRateLimiter.Create<string, string>(sender =>
+    RateLimitPartition.GetFixedWindowLimiter(sender, _ => new FixedWindowRateLimiterOptions
+    {
+        PermitLimit = 20,
+        Window = TimeSpan.FromMinutes(1),
+        QueueLimit = 0
+    })));
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -163,11 +202,15 @@ app.UseExceptionHandler(error =>
 });
 
 app.UseCors("AdminDashboard");
-app.UseRateLimiter();
+// Signature check first, so unsigned traffic can't use up the webhook's rate limit.
 app.UseMiddleware<HmacVerificationMiddleware>();
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 app.MapHealthChecks("/health");
 
 app.Run();
+
+// Lets the integration tests host this app.
+public partial class Program { }

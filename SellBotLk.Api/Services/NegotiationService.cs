@@ -34,7 +34,7 @@ public class NegotiationService
     {
         var product = await _db.Products.FindAsync(productId);
 
-        if (product == null)
+        if (product == null || !product.IsActive)
             return new NegotiationResult
             {
                 Outcome = NegotiationOutcome.ProductNotFound,
@@ -44,7 +44,9 @@ public class NegotiationService
         // Check if bulk discount applies first
         if (quantity >= product.BulkMinQty && product.BulkDiscountPercent > 0)
         {
-            var bulkPrice = product.Price * (1 - product.BulkDiscountPercent / 100m);
+            var bulkPrice = Math.Max(
+                product.Price * (1 - product.BulkDiscountPercent / 100m),
+                product.MinPrice);
 
             // If customer offer is at or above bulk price, accept it
             if (customerOffer >= bulkPrice)
@@ -58,9 +60,11 @@ public class NegotiationService
 
         // ── Negotiation logic ────────────────────────────────────────────
 
-        // Offer meets or exceeds MinPrice → Accept
+        // Offer meets or exceeds MinPrice → Accept, never charging above list price
+        // (an AI misreading could otherwise turn a typo into an overcharge)
         if (customerOffer >= product.MinPrice)
-            return BuildAcceptResult(product, quantity, customerOffer, language);
+            return BuildAcceptResult(
+                product, quantity, Math.Min(customerOffer, product.Price), language);
 
         // Offer is within 10% below MinPrice → Counteroffer at MinPrice
         var threshold = product.MinPrice * (1 - (decimal)CounterOfferThresholdPercent);

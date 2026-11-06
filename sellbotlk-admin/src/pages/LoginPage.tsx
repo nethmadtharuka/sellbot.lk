@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { ApiError } from '../api/http'
 import { sellbotApi } from '../api/sellbotApi'
 import { Button, Card, Field, Input } from '../components/ui'
 
@@ -18,8 +19,12 @@ export function LoginPage() {
     try {
       await sellbotApi.login(username, password)
       navigate('/orders', { replace: true })
-    } catch {
-      setError('Invalid username or password')
+    } catch (e) {
+      setError(
+        e instanceof ApiError && e.status === 429
+          ? 'Too many login attempts. Please wait a minute and try again.'
+          : 'Invalid username or password',
+      )
     } finally {
       setLoading(false)
     }

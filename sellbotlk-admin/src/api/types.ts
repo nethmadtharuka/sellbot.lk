@@ -24,6 +24,7 @@ export type OrderResponseDto = {
   customerPhone: string
   status: string
   paymentStatus: string
+  paymentReference?: string | null
   totalAmount: number
   discountAmount: number
   deliveryAddress?: string | null

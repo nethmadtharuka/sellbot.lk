@@ -76,22 +76,23 @@ public class OrderRepository
         return order;
     }
 
-    public async Task<Order?> UpdateStatusAsync(int id, OrderStatus status)
+    /// <summary>
+    /// Moves an order from one status to another only if it is still in the status
+    /// the caller read. Stops a status change from reviving an order that was
+    /// cancelled (and restocked) in the meantime. Returns false if it moved first.
+    /// </summary>
+    public async Task<bool> TryUpdateStatusAsync(
+        int id, OrderStatus from, OrderStatus to, string? driverNote = null)
     {
-        var order = await _db.Orders.FindAsync(id);
-        if (order == null) return null;
+        var now = DateTime.UtcNow;
+        var rows = await _db.Orders
+            .Where(o => o.Id == id && o.Status == from)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(o => o.Status, to)
+                .SetProperty(o => o.UpdatedAt, now)
+                .SetProperty(o => o.DriverNote, o => driverNote ?? o.DriverNote));
 
-        order.Status = status;
-        order.UpdatedAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync();
-        return order;
-    }
-
-    public async Task<int> GetOrderCountThisYearAsync()
-    {
-        var startOfYear = new DateTime(DateTime.UtcNow.Year, 1, 1);
-        return await _db.Orders
-            .CountAsync(o => o.CreatedAt >= startOfYear);
+        return rows == 1;
     }
 
     public async Task<List<Order>> GetRecentOrdersByPhoneAsync(

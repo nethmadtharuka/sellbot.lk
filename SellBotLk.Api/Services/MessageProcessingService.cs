@@ -281,27 +281,16 @@ public class MessageProcessingService
         int customerId,
         string language)
     {
-        Order? order = null;
+        // Every lookup is limited to this customer. Someone else's order number gets
+        // the same reply as one that doesn't exist, so numbers can't be probed.
+        var customerOrders = _db.Orders
+            .Include(o => o.Items)
+            .ThenInclude(i => i.Product)
+            .Where(o => o.CustomerId == customerId);
 
-        // Try by order number first if mentioned
-        if (!string.IsNullOrEmpty(parsed.OrderNumber))
-        {
-            order = await _db.Orders
-                .Include(o => o.Items)
-                .ThenInclude(i => i.Product)
-                .FirstOrDefaultAsync(o => o.OrderNumber == parsed.OrderNumber);
-        }
-
-        // Fall back to most recent order for this customer
-        if (order == null)
-        {
-            order = await _db.Orders
-                .Include(o => o.Items)
-                .ThenInclude(i => i.Product)
-                .Where(o => o.CustomerId == customerId)
-                .OrderByDescending(o => o.CreatedAt)
-                .FirstOrDefaultAsync();
-        }
+        var order = !string.IsNullOrEmpty(parsed.OrderNumber)
+            ? await customerOrders.FirstOrDefaultAsync(o => o.OrderNumber == parsed.OrderNumber)
+            : await customerOrders.OrderByDescending(o => o.CreatedAt).FirstOrDefaultAsync();
 
         if (order == null)
         {
@@ -471,10 +460,8 @@ public class MessageProcessingService
             (IsConfirmMessage(messageText) ||
              parsed.OfferedPrice == existingContext.CounterOffer))
         {
-            var createDto = new CreateOrderDto
-            {
-                CustomerId = customerId,
-                Items = new List<OrderItemDto>
+            var placed = await PlaceOrderAsync(fromPhone, customerId, language,
+                new List<OrderItemDto>
                 {
                     new()
                     {
@@ -482,21 +469,10 @@ public class MessageProcessingService
                         Quantity = existingContext.Quantity,
                         NegotiatedPrice = existingContext.CounterOffer
                     }
-                }
-            };
-
-            var order = await _orderService.CreateOrderAsync(createDto);
-            var confirmMsg = _orderService.FormatOrderConfirmationMessage(order);
-
-            await _negotiationService.ClearNegotiationContextAsync(customerId);
-            await _whatsAppSendService.SendButtonMessageAsync(
-                fromPhone,
-                confirmMsg,
-                new[]
-                {
-                    ($"track_{order.OrderNumber}", "Track Order"),
-                    ($"cancel_{order.OrderNumber}", "Cancel Order")
                 });
+
+            if (placed)
+                await _negotiationService.ClearNegotiationContextAsync(customerId);
             return;
         }
 
@@ -513,7 +489,7 @@ public class MessageProcessingService
             productId = match?.Id;
         }
 
-        if (productId == null || offeredPrice == null)
+        if (productId == null || offeredPrice == null || quantity < 1)
         {
             var clarifyMsg = language switch
             {
@@ -550,10 +526,8 @@ public class MessageProcessingService
         }
         else if (result.Outcome == NegotiationOutcome.Accepted)
         {
-            var createDto = new CreateOrderDto
-            {
-                CustomerId = customerId,
-                Items = new List<OrderItemDto>
+            var placed = await PlaceOrderAsync(fromPhone, customerId, language,
+                new List<OrderItemDto>
                 {
                     new()
                     {
@@ -561,21 +535,10 @@ public class MessageProcessingService
                         Quantity = quantity,
                         NegotiatedPrice = result.AcceptedPrice
                     }
-                }
-            };
-
-            var order = await _orderService.CreateOrderAsync(createDto);
-            await _negotiationService.ClearNegotiationContextAsync(customerId);
-
-            var confirmMsg = _orderService.FormatOrderConfirmationMessage(order);
-            await _whatsAppSendService.SendButtonMessageAsync(
-                fromPhone,
-                confirmMsg,
-                new[]
-                {
-                    ($"track_{order.OrderNumber}", "Track Order"),
-                    ($"cancel_{order.OrderNumber}", "Cancel Order")
                 });
+
+            if (placed)
+                await _negotiationService.ClearNegotiationContextAsync(customerId);
             return;
         }
 
@@ -617,6 +580,7 @@ public class MessageProcessingService
         var allProducts = await _productService.GetAllAsync();
         var orderItems = new List<OrderItemDto>();
         var notFoundNames = new List<string>();
+        var invalidQuantity = false;
 
         foreach (var item in parsed.OrderItems)
         {
@@ -630,11 +594,14 @@ public class MessageProcessingService
                 continue;
             }
 
+            invalidQuantity |= item.Quantity < 1;
+
+            // The AI's price is never used here: an order always starts at the
+            // catalogue price, and any offer goes through negotiation below.
             orderItems.Add(new OrderItemDto
             {
                 ProductId = match.Id,
-                Quantity = item.Quantity,
-                NegotiatedPrice = item.OfferedPrice
+                Quantity = item.Quantity
             });
         }
 
@@ -653,15 +620,62 @@ public class MessageProcessingService
             return;
         }
 
+        if (invalidQuantity)
+        {
+            var quantityMsg = language switch
+            {
+                "si" => "කරුණාකර ඔබට අවශ්‍ය ප්‍රමාණය ලියන්න (අවම වශයෙන් 1).\n" +
+                        "උදා: 'dining chairs 2ක් ගන්නවා'",
+                "ta" => "தயவுசெய்து தேவையான அளவைக் குறிப்பிடுங்கள் (குறைந்தது 1).\n" +
+                        "உதா: 'dining chairs 2 வேண்டும்'",
+                _ =>    "Please tell me how many you'd like (at least 1).\n" +
+                        "Example: 'I want 2 dining chairs'"
+            };
+            await _whatsAppSendService.SendTextMessageAsync(fromPhone, quantityMsg);
+            return;
+        }
+
+        // "2 chairs for LKR 100" is an offer, not an order. The negotiation rules
+        // decide it against the database price, one product at a time.
+        var pricedItems = parsed.OrderItems.Where(i => i.OfferedPrice != null).ToList();
+        if (pricedItems.Any())
+        {
+            if (parsed.OrderItems.Count > 1)
+            {
+                var oneAtATimeMsg = language switch
+                {
+                    "si" => "මිල ගැන කතා කිරීමට කරුණාකර වරකට එක් භාණ්ඩයක් පමණක් සඳහන් කරන්න.",
+                    "ta" => "விலை பேச, ஒரு நேரத்தில் ஒரு பொருளை மட்டும் குறிப்பிடுங்கள்.",
+                    _ =>    "To discuss a price, please ask about one product at a time."
+                };
+                await _whatsAppSendService.SendTextMessageAsync(fromPhone, oneAtATimeMsg);
+                return;
+            }
+
+            parsed.ProductId = orderItems[0].ProductId;
+            parsed.OfferedPrice = pricedItems[0].OfferedPrice;
+            await HandleNegotiationAsync(fromPhone, "", parsed, customerId, language);
+            return;
+        }
+
+        await PlaceOrderAsync(fromPhone, customerId, language, orderItems);
+    }
+
+    /// <summary>
+    /// Creates an order and sends its confirmation. A failure tells the customer
+    /// and returns false, so callers can leave their conversation state alone.
+    /// </summary>
+    private async Task<bool> PlaceOrderAsync(
+        string fromPhone, int customerId, string language, List<OrderItemDto> items)
+    {
         try
         {
-            var createDto = new CreateOrderDto
+            var order = await _orderService.CreateOrderAsync(new CreateOrderDto
             {
                 CustomerId = customerId,
-                Items = orderItems
-            };
+                Items = items
+            });
 
-            var order = await _orderService.CreateOrderAsync(createDto);
             var confirmationMsg = _orderService.FormatOrderConfirmationMessage(order);
             await _whatsAppSendService.SendButtonMessageAsync(
                 fromPhone,
@@ -671,6 +685,7 @@ public class MessageProcessingService
                     ($"track_{order.OrderNumber}", "Track Order"),
                     ($"cancel_{order.OrderNumber}", "Cancel Order")
                 });
+            return true;
         }
         catch (Exception ex)
         {
@@ -691,6 +706,7 @@ public class MessageProcessingService
             };
 
             await _whatsAppSendService.SendTextMessageAsync(fromPhone, errorMsg);
+            return false;
         }
     }
 
@@ -760,42 +776,7 @@ public class MessageProcessingService
             await _whatsAppSendService.SendTextMessageAsync(fromPhone, partialMsg);
         }
 
-        try
-        {
-            var createDto = new CreateOrderDto
-            {
-                CustomerId = customerId,
-                Items = orderItems
-            };
-
-            var order = await _orderService.CreateOrderAsync(createDto);
-            var confirmationMsg = _orderService.FormatOrderConfirmationMessage(order);
-            await _whatsAppSendService.SendButtonMessageAsync(
-                fromPhone,
-                confirmationMsg,
-                new[]
-                {
-                    ($"track_{order.OrderNumber}", "Track Order"),
-                    ($"cancel_{order.OrderNumber}", "Cancel Order")
-                });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Reorder failed for customer {Id}", customerId);
-            var errorMsg = language switch
-            {
-                "si" => ex.Message.Contains("stock", StringComparison.OrdinalIgnoreCase)
-                    ? $"😔 සමාවෙන්න — {ex.Message}"
-                    : "😔 නැවත ඇණවුම් කිරීමේ දෝෂයකි. නැවත උත්සාහ කරන්න.",
-                "ta" => ex.Message.Contains("stock", StringComparison.OrdinalIgnoreCase)
-                    ? $"😔 மன்னிக்கவும் — {ex.Message}"
-                    : "😔 மீண்டும் ஆர்டர் செய்ய முடியவில்லை. மீண்டும் முயற்சிக்கவும்.",
-                _ => ex.Message.Contains("stock", StringComparison.OrdinalIgnoreCase)
-                    ? $"😔 Sorry — {ex.Message}"
-                    : "😔 Something went wrong reordering. Please try again!"
-            };
-            await _whatsAppSendService.SendTextMessageAsync(fromPhone, errorMsg);
-        }
+        await PlaceOrderAsync(fromPhone, customerId, language, orderItems);
     }
 
     private async Task HandleProductSearchAsync(
