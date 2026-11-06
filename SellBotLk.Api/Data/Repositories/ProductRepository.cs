@@ -69,21 +69,66 @@ public class ProductRepository
         await _db.SaveChangesAsync();
         return true;
     }
-    public async Task DeductStockAsync(int productId, int quantity)
-{
-    var product = await _db.Products.FindAsync(productId);
-    if (product == null) return;
 
-    product.StockQty -= quantity;
-    await _db.SaveChangesAsync();
-}
+    /// <summary>
+    /// Atomically takes stock with a single conditional UPDATE, so concurrent orders
+    /// cannot oversell. Call inside a transaction: the row stays locked until commit,
+    /// which keeps the audit log's before/after figures exact.
+    /// Returns the stock left, or null if there was not enough (or the product is inactive).
+    /// </summary>
+    public async Task<int?> TryDeductStockAsync(int productId, int quantity)
+    {
+        var rows = await _db.Products
+            .Where(p => p.Id == productId && p.IsActive && p.StockQty >= quantity)
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.StockQty, p => p.StockQty - quantity));
 
-public async Task RestockAsync(int productId, int quantity)
-{
-    var product = await _db.Products.FindAsync(productId);
-    if (product == null) return;
+        if (rows == 0) return null;
 
-    product.StockQty += quantity;
-    await _db.SaveChangesAsync();
-}
+        return await ReadStockAsync(productId);
+    }
+
+    /// <summary>
+    /// Atomically adds stock and queues an audit row for the caller's SaveChanges.
+    /// Call inside a transaction. Returns the new stock level.
+    /// </summary>
+    public async Task<int> RestockAsync(
+        int productId, int quantity, InventoryChangeType changeType, string reference)
+    {
+        await _db.Products
+            .Where(p => p.Id == productId)
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.StockQty, p => p.StockQty + quantity));
+
+        var after = await ReadStockAsync(productId);
+        LogStockChange(productId, changeType, after - quantity, after, reference);
+        return after;
+    }
+
+    /// <summary>Drops audit rows from a failed transaction so a later save can't insert them.</summary>
+    public void DiscardPendingLogs()
+    {
+        foreach (var entry in _db.ChangeTracker.Entries<InventoryLog>()
+                     .Where(e => e.State == EntityState.Added))
+            entry.State = EntityState.Detached;
+    }
+
+    private Task<int> ReadStockAsync(int productId) =>
+        _db.Products.AsNoTracking()
+            .Where(p => p.Id == productId)
+            .Select(p => p.StockQty)
+            .FirstAsync();
+
+    /// <summary>Queues an audit row; the caller's SaveChanges writes it.</summary>
+    public void LogStockChange(
+        int productId, InventoryChangeType changeType, int before, int after, string reference)
+    {
+        _db.InventoryLogs.Add(new InventoryLog
+        {
+            ProductId = productId,
+            ChangeType = changeType,
+            QuantityBefore = before,
+            QuantityAfter = after,
+            ReferenceId = reference,
+            CreatedAt = DateTime.UtcNow
+        });
+    }
 }

@@ -1,7 +1,9 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 
 namespace SellBotLk.Api.Controllers;
@@ -10,34 +12,59 @@ namespace SellBotLk.Api.Controllers;
 [Route("api/v1/auth")]
 public class AuthController : ControllerBase
 {
-    private readonly IConfiguration _config;
+    public const int MinPasswordLength = 12;
 
-    public AuthController(IConfiguration config)
+    private readonly IConfiguration _config;
+    private readonly ILogger<AuthController> _logger;
+
+    public AuthController(IConfiguration config, ILogger<AuthController> logger)
     {
         _config = config;
+        _logger = logger;
     }
+
+    /// <summary>Program.cs refuses to start unless the configured password passes this.</summary>
+    public static bool IsAcceptablePassword(string? password) =>
+        !string.IsNullOrWhiteSpace(password) && password.Length >= MinPasswordLength;
 
     /// <summary>
     /// Authenticates an admin user and returns a JWT token.
-    /// Credentials are validated against app configuration.
+    /// Credentials are validated against app configuration. There are no defaults:
+    /// with no usable credentials configured, nobody can log in.
     /// </summary>
     [HttpPost("login")]
+    [EnableRateLimiting("login")]
     public IActionResult Login([FromBody] LoginRequest request)
     {
         var adminUser = _config["Admin:Username"];
         var adminPass = _config["Admin:Password"];
 
-        // Treat missing/empty config as defaults for local/demo usage.
-        // (appsettings.json may contain empty strings which should not disable login)
-        if (string.IsNullOrWhiteSpace(adminUser)) adminUser = "admin";
-        if (string.IsNullOrWhiteSpace(adminPass)) adminPass = "admin";
+        if (string.IsNullOrWhiteSpace(adminUser) || !IsAcceptablePassword(adminPass))
+        {
+            _logger.LogError("Admin login is disabled: credentials are not configured properly");
+            return StatusCode(StatusCodes.Status503ServiceUnavailable,
+                new { message = "Admin login is not configured" });
+        }
 
-        if (request.Username != adminUser || request.Password != adminPass)
+        // "&" rather than "&&" so a wrong username takes as long as a wrong password.
+        var isValid = SecretEquals(request.Username, adminUser) &
+                      SecretEquals(request.Password, adminPass!);
+
+        if (!isValid)
+        {
+            _logger.LogWarning("Failed admin login from {Ip}", HttpContext?.Connection.RemoteIpAddress);
             return Unauthorized(new { message = "Invalid credentials" });
+        }
 
         var token = GenerateJwtToken(request.Username);
         return Ok(new { token });
     }
+
+    // Hashing first gives both sides the same length for a constant-time comparison.
+    private static bool SecretEquals(string supplied, string expected) =>
+        CryptographicOperations.FixedTimeEquals(
+            SHA256.HashData(Encoding.UTF8.GetBytes(supplied)),
+            SHA256.HashData(Encoding.UTF8.GetBytes(expected)));
 
     private string GenerateJwtToken(string username)
     {

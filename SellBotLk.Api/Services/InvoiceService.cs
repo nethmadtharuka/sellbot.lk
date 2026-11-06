@@ -152,16 +152,19 @@ public class InvoiceService
             column.Item().PaddingTop(10).Column(payment =>
             {
                 payment.Item().Text("Payment Information").SemiBold().FontSize(12);
-                payment.Item().PaddingTop(5).Text($"Status: Pending Admin Review")
-                    .FontColor(Colors.Orange.Darken2);
+                var isPaid = order.PaymentStatus == "Paid";
+
+                payment.Item().PaddingTop(5)
+                    .Text(isPaid ? "Status: Paid" : "Status: Pending Admin Review")
+                    .FontColor(isPaid ? Colors.Green.Darken2 : Colors.Orange.Darken2);
 
                 if (!string.IsNullOrEmpty(paymentReference))
                     payment.Item().Text($"Reference: {paymentReference}");
 
-                payment.Item().PaddingTop(5)
-                    .Text("This invoice is auto-generated after payment slip submission. " +
-                          "Final confirmation is subject to admin review.")
-                    .FontSize(8).FontColor(Colors.Grey.Darken1);
+                if (!isPaid)
+                    payment.Item().PaddingTop(5)
+                        .Text("Final confirmation is subject to admin review.")
+                        .FontSize(8).FontColor(Colors.Grey.Darken1);
             });
         });
     }

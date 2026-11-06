@@ -11,7 +11,6 @@ namespace SellBotLk.Api.Webhooks;
 
 [ApiController]
 [Route("api/v1/webhook")]
-[EnableRateLimiting("webhook")]
 public class WhatsAppWebhookController : ControllerBase
 {
     private readonly IConfiguration _config;
@@ -21,6 +20,7 @@ public class WhatsAppWebhookController : ControllerBase
     private readonly MediaDownloadService _mediaDownloadService;
     private readonly PaymentMatchingService _paymentMatchingService;
     private readonly AppDbContext _context;
+    private readonly PartitionedRateLimiter<string> _senderLimiter;
     private readonly ILogger<WhatsAppWebhookController> _logger;
 
     public WhatsAppWebhookController(
@@ -31,8 +31,10 @@ public class WhatsAppWebhookController : ControllerBase
         MediaDownloadService mediaDownloadService,
         PaymentMatchingService paymentMatchingService,
         AppDbContext context,
+        PartitionedRateLimiter<string> senderLimiter,
         ILogger<WhatsAppWebhookController> logger)
     {
+        _senderLimiter = senderLimiter;
         _config = config;
         _whatsAppSendService = whatsAppSendService;
         _messageProcessingService = messageProcessingService;
@@ -68,9 +70,13 @@ public class WhatsAppWebhookController : ControllerBase
     /// <summary>
     /// Receives all incoming WhatsApp messages and events.
     /// HMAC signature verified by HmacVerificationMiddleware before reaching here.
-    /// Always returns 200 to Meta — never let Meta retry due to our errors.
+    /// Each message ID runs at most once. A message that fails while processing gets
+    /// a "please try again" reply rather than a retry, so an order can't be repeated.
+    /// Only a failure before a message could be claimed returns 500, asking Meta to
+    /// redeliver; messages already claimed in that batch are skipped on the retry.
     /// </summary>
     [HttpPost("whatsapp")]
+    [EnableRateLimiting("webhook")]
     public async Task<IActionResult> Receive([FromBody] WhatsAppIncomingDto payload)
     {
         try
@@ -93,6 +99,24 @@ public class WhatsAppWebhookController : ControllerBase
                     .FirstOrDefault(c => c.WaId == message.From)
                     ?.Profile?.Name ?? "Unknown";
 
+                // Checked first, so a flood costs no database writes or AI calls.
+                using var lease = _senderLimiter.AttemptAcquire(message.From);
+                if (!lease.IsAcquired)
+                {
+                    _logger.LogWarning(
+                        "Sender rate limit exceeded — dropped message from {Phone}",
+                        MaskPhone(message.From));
+                    continue;
+                }
+
+                if (!await TryClaimMessageAsync(message.Id))
+                {
+                    _logger.LogInformation(
+                        "Duplicate webhook delivery ignored from {Phone}",
+                        MaskPhone(message.From));
+                    continue;
+                }
+
                 _logger.LogInformation(
                     "Message received from {Phone} ({Name}) — Type: {Type}",
                     MaskPhone(message.From), senderName, message.Type);
@@ -110,6 +134,9 @@ public class WhatsAppWebhookController : ControllerBase
                         "Failed to process message from {Phone} — Type: {Type}",
                         MaskPhone(message.From), message.Type);
 
+                    // A failed save must not leak into the next message in this batch.
+                    _context.ChangeTracker.Clear();
+
                     // Best-effort error reply — don't let this throw either
                     try
                     {
@@ -126,8 +153,20 @@ public class WhatsAppWebhookController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error processing webhook payload");
-            return Ok(); // Always return 200 to Meta — never let Meta retry
+            return StatusCode(StatusCodes.Status500InternalServerError);
         }
+    }
+
+    /// <summary>
+    /// Atomically claims a WhatsApp message ID. The primary key means only one
+    /// delivery can win, even if Meta's retries overlap with the original.
+    /// </summary>
+    private async Task<bool> TryClaimMessageAsync(string messageId)
+    {
+        var rows = await _context.Database.ExecuteSqlInterpolatedAsync(
+            $"INSERT IGNORE INTO ProcessedWebhookMessages (MessageId, ProcessedAt) VALUES ({messageId}, {DateTime.UtcNow})");
+
+        return rows == 1;
     }
 
     private async Task ProcessMessageAsync(
@@ -248,6 +287,24 @@ public class WhatsAppWebhookController : ControllerBase
             return;
         }
 
+        // Only the owner's number can submit supplier invoices. Meta's signed payload
+        // vouches for the sender, and customers' documents can never change stock.
+        var isOwner = _documentService.IsOwnerPhone(message.From);
+        var customer = await GetCustomerByPhoneAsync(message.From);
+
+        if (!isOwner && !await IsPaymentContextAsync(customer?.Id))
+        {
+            _logger.LogWarning(
+                "Ignored document from non-owner {Phone} with no payment pending",
+                MaskPhone(message.From));
+
+            await _whatsAppSendService.SendTextMessageAsync(
+                message.From,
+                "Thanks, but I can only accept documents as payment slips for an " +
+                "open order. Please type your question and I'll help you!");
+            return;
+        }
+
         await _whatsAppSendService.SendTextMessageAsync(
             message.From,
             "📄 Processing your document... please wait.");
@@ -263,14 +320,11 @@ public class WhatsAppWebhookController : ControllerBase
             return;
         }
 
-        var customer = await GetCustomerByPhoneAsync(message.From);
-
-        // PDFs are treated as supplier invoices by default.
-        // Owner can reprocess with correct type from the admin dashboard.
+        // Owner documents are treated as supplier invoices; a customer's is a payment slip.
         await _documentService.ProcessDocumentAsync(
             docBytes,
             docMime,
-            DocumentType.SupplierInvoice,
+            isOwner ? DocumentType.SupplierInvoice : DocumentType.PaymentSlip,
             customer?.Id,
             message.From);
     }

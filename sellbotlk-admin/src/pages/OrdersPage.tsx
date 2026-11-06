@@ -25,6 +25,7 @@ function toneForPaymentStatus(ps: string): 'neutral' | 'good' | 'warn' | 'bad' {
     case 'paid':
       return 'good'
     case 'unpaid':
+    case 'pendingreview':
       return 'warn'
     case 'refunded':
       return 'neutral'

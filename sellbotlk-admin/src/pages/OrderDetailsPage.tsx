@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { ApiError } from '../api/http'
 import { sellbotApi } from '../api/sellbotApi'
 import type { OrderResponseDto } from '../api/types'
 import { Badge, Button, Card, Field, Input, Select, Table } from '../components/ui'
@@ -31,12 +32,21 @@ function toneForPaymentStatus(ps: string): 'neutral' | 'good' | 'warn' | 'bad' {
     case 'paid':
       return 'good'
     case 'unpaid':
+    case 'pendingreview':
       return 'warn'
     case 'refunded':
       return 'neutral'
     default:
       return 'neutral'
   }
+}
+
+function errorMessage(e: unknown): string {
+  if (e instanceof ApiError) {
+    const body = e.body as { error?: string } | undefined
+    if (body?.error) return body.error
+  }
+  return e instanceof Error ? e.message : 'The action failed'
 }
 
 export function OrderDetailsPage() {
@@ -48,6 +58,16 @@ export function OrderDetailsPage() {
   const [deliveryStatus, setDeliveryStatus] = useState<string>('Dispatched')
   const [driverNote, setDriverNote] = useState<string>('')
   const [busy, setBusy] = useState(false)
+  const [actionError, setActionError] = useState('')
+  const [slip, setSlip] = useState<{ url: string; isImage: boolean } | null>(null)
+  const [rejectReason, setRejectReason] = useState('')
+
+  // Free the slip's object URL when it's replaced or the page closes.
+  useEffect(() => {
+    return () => {
+      if (slip) URL.revokeObjectURL(slip.url)
+    }
+  }, [slip])
 
   const load = useCallback(async () => {
     setState({ kind: 'loading' })
@@ -75,11 +95,26 @@ export function OrderDetailsPage() {
 
   async function run<T>(fn: () => Promise<T>) {
     setBusy(true)
+    setActionError('')
     try {
       await fn()
+      setSlip(null)
+      setRejectReason('')
       await load()
+    } catch (e) {
+      setActionError(errorMessage(e))
     } finally {
       setBusy(false)
+    }
+  }
+
+  async function viewSlip(orderId: number) {
+    setActionError('')
+    try {
+      const blob = await sellbotApi.getPaymentSlip(orderId)
+      setSlip({ url: URL.createObjectURL(blob), isImage: blob.type.startsWith('image/') })
+    } catch (e) {
+      setActionError(errorMessage(e))
     }
   }
 
@@ -108,8 +143,58 @@ export function OrderDetailsPage() {
         </Card>
       )}
 
+      {actionError && (
+        <Card title="Action failed">
+          <div style={{ color: 'var(--bad)' }}>{actionError}</div>
+        </Card>
+      )}
+
       {state.kind === 'loaded' && order && (
         <>
+          {order.paymentStatus === 'PendingReview' && (
+            <Card title="Payment awaiting review">
+              <div style={{ display: 'grid', gap: 10 }}>
+                <div className="muted">
+                  The slip was read by AI and hasn't been verified. Find this transfer in your bank account before
+                  approving: a screenshot alone isn't proof of payment.
+                </div>
+                <div>
+                  Amount due: <strong>LKR {order.totalAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}</strong>
+                  {' · '}
+                  Reference: <strong>{order.paymentReference || 'none found'}</strong>
+                </div>
+                <div>
+                  <Button variant="secondary" onClick={() => void viewSlip(order.id)} disabled={busy}>
+                    View slip
+                  </Button>
+                </div>
+                {slip &&
+                  (slip.isImage ? (
+                    <img src={slip.url} alt={`Payment slip for ${order.orderNumber}`} style={{ maxWidth: '100%', maxHeight: 480 }} />
+                  ) : (
+                    <a href={slip.url} target="_blank" rel="noreferrer">
+                      Open slip PDF
+                    </a>
+                  ))}
+                <Field label="Rejection reason (optional, sent to the customer)">
+                  <Input value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} />
+                </Field>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <Button onClick={() => void run(() => sellbotApi.approvePayment(order.id))} disabled={busy}>
+                    Approve payment
+                  </Button>
+                  <Button
+                    variant="danger"
+                    onClick={() => void run(() => sellbotApi.rejectPayment(order.id, rejectReason.trim() || undefined))}
+                    disabled={busy}
+                  >
+                    Reject slip
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          )}
+
           <Card
             title={
               <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>

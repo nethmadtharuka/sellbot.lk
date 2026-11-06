@@ -65,6 +65,17 @@ export async function apiGet<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T
 }
 
+export async function apiGetBlob(path: string): Promise<Blob> {
+  const url = `${API_BASE_URL}${path.startsWith('/') ? '' : '/'}${path}`
+  const res = await fetch(url, { method: 'GET', headers: authHeaders() })
+
+  handleUnauthorized(res)
+  if (!res.ok) {
+    throw new ApiError(`GET ${path} failed`, res.status, await readJsonSafe(res))
+  }
+  return res.blob()
+}
+
 export async function apiPost<T>(
   path: string,
   payload: unknown,

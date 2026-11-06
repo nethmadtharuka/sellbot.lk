@@ -29,7 +29,13 @@ public enum PaymentStatus
 {
     Unpaid = 0,
     Paid = 1,
-    Refunded = 2
+    Refunded = 2,
+
+    /// <summary>
+    /// A slip was submitted and matched by AI, but nothing is confirmed.
+    /// Only an admin approval can move this to Paid.
+    /// </summary>
+    PendingReview = 3
 }
 
 /// <summary>
@@ -82,15 +88,15 @@ public class Order
     public decimal DiscountAmount { get; set; } = 0.00m;
 
     /// <summary>
-    /// Current payment state.
-    /// Updated by DocumentService when a payment slip is verified.
+    /// Current payment state. Set to PendingReview when a slip is submitted;
+    /// only PaymentMatchingService.ApprovePaymentAsync (admin) sets Paid.
     /// </summary>
     [Required]
     public PaymentStatus PaymentStatus { get; set; } = PaymentStatus.Unpaid;
 
     /// <summary>
-    /// Bank transfer reference number extracted from payment slip by Gemini Vision.
-    /// Stored for manual reconciliation if needed.
+    /// Bank transfer reference extracted from the slip by Gemini Vision, normalized
+    /// to upper-case alphanumerics. Unique, so one reference cannot pay two orders.
     /// </summary>
     [MaxLength(100)]
     public string? PaymentReference { get; set; }

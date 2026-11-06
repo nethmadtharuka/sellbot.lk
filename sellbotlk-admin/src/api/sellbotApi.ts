@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPut, setToken } from './http'
+import { apiGet, apiGetBlob, apiPost, apiPut, setToken } from './http'
 import type {
   AnalyticsSummaryDto,
   ApiEnvelope,
@@ -36,6 +36,14 @@ export const sellbotApi = {
 
   cancelOrder: (id: number) =>
     apiPut<ApiEnvelope<OrderResponseDto>>(`/api/v1/orders/${id}/cancel`, {}),
+
+  approvePayment: (id: number) =>
+    apiPut<ApiEnvelope<OrderResponseDto>>(`/api/v1/orders/${id}/payment/approve`, {}),
+
+  rejectPayment: (id: number, reason?: string) =>
+    apiPut<ApiEnvelope<OrderResponseDto>>(`/api/v1/orders/${id}/payment/reject`, { reason }),
+
+  getPaymentSlip: (id: number) => apiGetBlob(`/api/v1/orders/${id}/payment-slip`),
 
   getDeliveryZones: () =>
     apiGet<ApiEnvelope<DeliveryZoneResponseDto[]>>(`/api/v1/delivery-zones`),

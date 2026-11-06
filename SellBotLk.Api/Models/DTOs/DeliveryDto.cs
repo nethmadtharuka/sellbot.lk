@@ -34,7 +34,9 @@ public class UpdateDeliveryStatusDto
 
 public class PaymentVerificationResultDto
 {
+    /// <summary>True when the slip was accepted for admin review; never means Paid.</summary>
     public bool Success { get; set; }
+    public int DocumentId { get; set; }
     public string? OrderNumber { get; set; }
     public decimal? AmountVerified { get; set; }
     public string? Reference { get; set; }

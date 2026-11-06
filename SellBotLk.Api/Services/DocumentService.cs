@@ -14,6 +14,7 @@ public class DocumentService
     private readonly GeminiVisionService _visionService;
     private readonly ProductRepository _productRepository;
     private readonly WhatsAppSendService _whatsAppSendService;
+    private readonly PaymentMatchingService _paymentMatchingService;
     private readonly IConfiguration _config;
     private readonly ILogger<DocumentService> _logger;
 
@@ -22,6 +23,7 @@ public class DocumentService
         GeminiVisionService visionService,
         ProductRepository productRepository,
         WhatsAppSendService whatsAppSendService,
+        PaymentMatchingService paymentMatchingService,
         IConfiguration config,
         ILogger<DocumentService> logger)
     {
@@ -29,12 +31,28 @@ public class DocumentService
         _visionService = visionService;
         _productRepository = productRepository;
         _whatsAppSendService = whatsAppSendService;
+        _paymentMatchingService = paymentMatchingService;
         _config = config;
         _logger = logger;
     }
 
     /// <summary>
+    /// True only when the phone matches the configured owner number.
+    /// With no owner configured nobody matches, so this fails closed.
+    /// </summary>
+    public bool IsOwnerPhone(string? phone)
+    {
+        var owner = DigitsOnly(_config["Owner:Phone"] ?? _config["OWNER_PHONE"]);
+        return owner.Length > 0 && owner == DigitsOnly(phone);
+    }
+
+    private static string DigitsOnly(string? value) =>
+        new((value ?? "").Where(char.IsDigit).ToArray());
+
+    /// <summary>
     /// Main entry point — routes document to correct processor by type.
+    /// A null fromPhone means the upload came through the JWT-protected admin API.
+    /// Any phone number must belong to the owner before an invoice can touch stock.
     /// </summary>
     public async Task<DocumentResponseDto> ProcessDocumentAsync(
         byte[] fileBytes,
@@ -46,6 +64,23 @@ public class DocumentService
         _logger.LogInformation(
             "Processing {Type} document — {Size} bytes, mime: {Mime}",
             documentType, fileBytes.Length, mimeType);
+
+        if (documentType == DocumentType.SupplierInvoice &&
+            fromPhone != null && !IsOwnerPhone(fromPhone))
+        {
+            _logger.LogWarning("Rejected supplier invoice from a non-owner phone number");
+            throw new UnauthorizedAccessException(
+                "Only the business owner can submit supplier invoices.");
+        }
+
+        // Slips have one pipeline, shared with WhatsApp, which never marks an order Paid.
+        if (documentType == DocumentType.PaymentSlip)
+        {
+            var result = await _paymentMatchingService.ProcessPaymentSlipAsync(
+                fileBytes, mimeType, customerId, fromPhone);
+
+            return MapToDto((await _db.Documents.FindAsync(result.DocumentId))!);
+        }
 
         // For PDFs, extract first page as image for Gemini Vision
         var processBytes = fileBytes;
@@ -68,12 +103,6 @@ public class DocumentService
                     .ExtractInvoiceDataAsync(processBytes, processMime);
                 (vendorName, totalAmount, documentDate, processingNotes) =
                     ParseInvoiceMeta(extractedJson);
-                break;
-
-            case DocumentType.PaymentSlip:
-                extractedJson = await _visionService
-                    .ExtractPaymentDataAsync(processBytes, processMime);
-                (totalAmount, processingNotes) = ParsePaymentMeta(extractedJson);
                 break;
 
             case DocumentType.DamageReport:
@@ -109,9 +138,6 @@ public class DocumentService
         if (documentType == DocumentType.SupplierInvoice)
             await ProcessSupplierInvoiceAsync(document, fromPhone);
 
-        if (documentType == DocumentType.PaymentSlip)
-            await ProcessPaymentSlipAsync(document, customerId, fromPhone);
-
         if (documentType == DocumentType.DamageReport)
             await NotifyOwnerOfDamageAsync(document, fromPhone);
 
@@ -144,42 +170,46 @@ public class DocumentService
             var restockedItems = new List<string>();
             var notFoundItems = new List<string>();
 
-            foreach (var item in invoice.Items)
+            await using (var transaction = await _db.Database.BeginTransactionAsync())
             {
-                // Find matching product by name (case-insensitive partial match)
-                var product = await _db.Products
-                    .FirstOrDefaultAsync(p =>
-                        p.IsActive &&
-                        p.Name.ToLower().Contains(
-                            item.ProductName.ToLower()));
-
-                if (product == null)
+                foreach (var item in invoice.Items)
                 {
-                    notFoundItems.Add(item.ProductName);
-                    continue;
+                    // AI-read values: a blank name would match every product, and a
+                    // zero or negative quantity must never change stock.
+                    if (string.IsNullOrWhiteSpace(item.ProductName) || item.Quantity < 1)
+                    {
+                        notFoundItems.Add(
+                            $"{item.ProductName ?? "(no name)"} (invalid line, qty {item.Quantity})");
+                        continue;
+                    }
+
+                    // Find matching product by name (case-insensitive partial match)
+                    var product = await _db.Products
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(p =>
+                            p.IsActive &&
+                            p.Name.ToLower().Contains(
+                                item.ProductName.ToLower()));
+
+                    if (product == null)
+                    {
+                        notFoundItems.Add(item.ProductName);
+                        continue;
+                    }
+
+                    var newStock = await _productRepository.RestockAsync(
+                        product.Id, item.Quantity,
+                        InventoryChangeType.SupplierRestock, $"DOC-{document.Id}");
+
+                    restockedItems.Add(
+                        $"{product.Name}: +{item.Quantity} " +
+                        $"(now {newStock})");
                 }
 
-                var qtyBefore = product.StockQty;
-                product.StockQty += item.Quantity;
-
-                // Log inventory change
-                _db.InventoryLogs.Add(new InventoryLog
-                {
-                    ProductId = product.Id,
-                    ChangeType = InventoryChangeType.SupplierRestock,
-                    QuantityBefore = qtyBefore,
-                    QuantityAfter = product.StockQty,
-                    ReferenceId = $"DOC-{document.Id}",
-                    CreatedAt = DateTime.UtcNow
-                });
-
-                restockedItems.Add(
-                    $"{product.Name}: +{item.Quantity} " +
-                    $"(now {product.StockQty})");
+                document.IsProcessed = true;
+                await _db.SaveChangesAsync();
+                await transaction.CommitAsync();
             }
-
-            document.IsProcessed = true;
-            await _db.SaveChangesAsync();
 
             // Build confirmation message
             var summary = $"✅ Invoice processed successfully!\n\n";
@@ -209,11 +239,6 @@ public class DocumentService
                 await _whatsAppSendService.SendTextMessageAsync(
                     ownerPhone, summary);
 
-            // Also reply to sender if different from owner
-            if (!string.IsNullOrEmpty(fromPhone) && fromPhone != ownerPhone)
-                await _whatsAppSendService.SendTextMessageAsync(
-                    fromPhone, summary);
-
             _logger.LogInformation(
                 "Invoice processed — {Restocked} restocked, {NotFound} not found",
                 restockedItems.Count, notFoundItems.Count);
@@ -221,141 +246,7 @@ public class DocumentService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error processing supplier invoice");
-            document.ProcessingNotes = $"Processing error: {ex.Message}";
-            await _db.SaveChangesAsync();
-        }
-    }
-
-    /// <summary>
-    /// Processes a payment slip — matches to pending order and confirms payment.
-    /// </summary>
-    private async Task ProcessPaymentSlipAsync(
-        Document document, int? customerId, string? fromPhone)
-    {
-        try
-        {
-            var payment = JsonSerializer.Deserialize<ExtractedPaymentData>(
-                document.ExtractedData,
-                new JsonSerializerOptions
-                    { PropertyNameCaseInsensitive = true })
-                ?? new ExtractedPaymentData();
-
-            if (payment.Confidence < 0.5)
-            {
-                var lowConfidenceMsg =
-                    "⚠️ I had trouble reading your payment slip clearly. " +
-                    "Please send a clearer photo in good lighting. " +
-                    "Your payment has NOT been confirmed yet.";
-
-                if (!string.IsNullOrEmpty(fromPhone))
-                    await _whatsAppSendService.SendTextMessageAsync(
-                        fromPhone, lowConfidenceMsg);
-
-                document.ProcessingNotes =
-                    $"Low confidence extraction: {payment.Confidence:P0}";
-                await _db.SaveChangesAsync();
-                return;
-            }
-
-            if (!payment.Amount.HasValue || payment.Amount <= 0)
-            {
-                document.ProcessingNotes = "Could not extract payment amount.";
-                await _db.SaveChangesAsync();
-                return;
-            }
-
-            // Find matching unpaid order for this customer
-            var matchingOrder = await _db.Orders
-                .Where(o => o.CustomerId == customerId &&
-                            o.PaymentStatus == PaymentStatus.Unpaid &&
-                            o.Status != OrderStatus.Cancelled)
-                .OrderByDescending(o => o.CreatedAt)
-                .FirstOrDefaultAsync();
-
-            if (matchingOrder == null)
-            {
-                var noOrderMsg =
-                    "✅ Payment slip received!\n\n" +
-                    $"Amount: LKR {payment.Amount:N0}\n" +
-                    $"Reference: {payment.Reference ?? "N/A"}\n\n" +
-                    "However, I couldn't find a pending order to match " +
-                    "this payment to. Please contact us for assistance.";
-
-                if (!string.IsNullOrEmpty(fromPhone))
-                    await _whatsAppSendService.SendTextMessageAsync(
-                        fromPhone, noOrderMsg);
-
-                document.ProcessingNotes = "No matching pending order found.";
-                await _db.SaveChangesAsync();
-                return;
-            }
-
-            // Check amount matches order total (allow 1% tolerance)
-            var tolerance = matchingOrder.TotalAmount * 0.01m;
-            var amountMatches = Math.Abs(
-                payment.Amount.Value - matchingOrder.TotalAmount) <= tolerance;
-
-            if (!amountMatches)
-            {
-                var mismatchMsg =
-                    $"⚠️ Payment amount mismatch!\n\n" +
-                    $"Order total: LKR {matchingOrder.TotalAmount:N0}\n" +
-                    $"Payment received: LKR {payment.Amount:N0}\n\n" +
-                    "Please contact us to resolve this difference.";
-
-                if (!string.IsNullOrEmpty(fromPhone))
-                    await _whatsAppSendService.SendTextMessageAsync(
-                        fromPhone, mismatchMsg);
-
-                // Alert owner
-                var ownerPhone = _config["Owner:Phone"] ?? _config["OWNER_PHONE"];
-                if (!string.IsNullOrEmpty(ownerPhone))
-                    await _whatsAppSendService.SendTextMessageAsync(
-                        ownerPhone,
-                        $"⚠️ Payment mismatch on {matchingOrder.OrderNumber}!\n" +
-                        $"Expected: LKR {matchingOrder.TotalAmount:N0}\n" +
-                        $"Received: LKR {payment.Amount:N0}\n" +
-                        $"Ref: {payment.Reference}");
-
-                document.ProcessingNotes =
-                    $"Amount mismatch: expected {matchingOrder.TotalAmount}, " +
-                    $"received {payment.Amount}";
-                await _db.SaveChangesAsync();
-                return;
-            }
-
-            // Confirm payment
-            matchingOrder.PaymentStatus = PaymentStatus.Paid;
-            matchingOrder.PaymentReference = payment.Reference;
-            matchingOrder.Status = OrderStatus.Confirmed;
-            matchingOrder.UpdatedAt = DateTime.UtcNow;
-            document.IsProcessed = true;
-            document.ProcessingNotes =
-                $"Payment confirmed for {matchingOrder.OrderNumber}";
-
-            await _db.SaveChangesAsync();
-
-            // Send confirmation to customer
-            var confirmMsg =
-                $"✅ Payment confirmed!\n\n" +
-                $"Order: {matchingOrder.OrderNumber}\n" +
-                $"Amount: LKR {payment.Amount:N0}\n" +
-                $"Reference: {payment.Reference ?? "N/A"}\n" +
-                $"Bank: {payment.Bank ?? "N/A"}\n\n" +
-                $"Your order is now confirmed and will be processed shortly. " +
-                $"We'll notify you when it's dispatched! 🚚";
-
-            if (!string.IsNullOrEmpty(fromPhone))
-                await _whatsAppSendService.SendTextMessageAsync(
-                    fromPhone, confirmMsg);
-
-            _logger.LogInformation(
-                "Payment confirmed for order {OrderNumber}",
-                matchingOrder.OrderNumber);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error processing payment slip");
+            _productRepository.DiscardPendingLogs();
             document.ProcessingNotes = $"Processing error: {ex.Message}";
             await _db.SaveChangesAsync();
         }
@@ -434,23 +325,6 @@ public class DocumentService
             return (data?.Vendor, data?.Total, date, notes);
         }
         catch { return (null, null, null, "Extraction failed."); }
-    }
-
-    private static (decimal? amount, string? notes) ParsePaymentMeta(string json)
-    {
-        try
-        {
-            var data = JsonSerializer.Deserialize<ExtractedPaymentData>(
-                json, new JsonSerializerOptions
-                    { PropertyNameCaseInsensitive = true });
-
-            var notes = data?.Confidence >= 0.8
-                ? "Payment slip read successfully."
-                : $"Low confidence: {data?.Confidence:P0}. Manual review recommended.";
-
-            return (data?.Amount, notes);
-        }
-        catch { return (null, "Extraction failed."); }
     }
 
     /// <summary>

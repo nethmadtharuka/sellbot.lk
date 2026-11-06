@@ -12,15 +12,18 @@ public class OrdersController : ControllerBase
 {
     private readonly OrderService _orderService;
     private readonly DeliveryService _deliveryService;
+    private readonly PaymentMatchingService _paymentMatchingService;
     private readonly ILogger<OrdersController> _logger;
 
     public OrdersController(
         OrderService orderService,
-         DeliveryService deliveryService, 
+         DeliveryService deliveryService,
+        PaymentMatchingService paymentMatchingService,
         ILogger<OrdersController> logger)
     {
         _orderService = orderService;
         _deliveryService = deliveryService;
+        _paymentMatchingService = paymentMatchingService;
         _logger = logger;
     }
 
@@ -117,6 +120,63 @@ public async Task<IActionResult> UpdateDeliveryStatus(
     return Ok(new { success = true,
         message = $"Order {id} status updated to {dto.Status}" });
 }
+
+    /// <summary>Approve a slip after checking the bank account. Marks the order Paid.</summary>
+    [HttpPut("{id}/payment/approve")]
+    public async Task<IActionResult> ApprovePayment(int id)
+    {
+        try
+        {
+            var order = await _paymentMatchingService.ApprovePaymentAsync(
+                id, User.Identity?.Name);
+            if (order == null)
+                return NotFound(new { success = false,
+                    error = $"Order {id} not found" });
+
+            return Ok(new { success = true, data = order,
+                message = "Payment approved." });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { success = false, error = ex.Message });
+        }
+    }
+
+    /// <summary>Reject a slip. The order returns to Unpaid and the slip is released.</summary>
+    [HttpPut("{id}/payment/reject")]
+    public async Task<IActionResult> RejectPayment(
+        int id, [FromBody] RejectPaymentDto? dto = null)
+    {
+        try
+        {
+            var order = await _paymentMatchingService.RejectPaymentAsync(
+                id, User.Identity?.Name, dto?.Reason);
+            if (order == null)
+                return NotFound(new { success = false,
+                    error = $"Order {id} not found" });
+
+            return Ok(new { success = true, data = order,
+                message = "Payment rejected." });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { success = false, error = ex.Message });
+        }
+    }
+
+    /// <summary>Download the payment slip submitted for an order</summary>
+    [HttpGet("{id}/payment-slip")]
+    public async Task<IActionResult> GetPaymentSlip(int id)
+    {
+        var slip = await _paymentMatchingService.GetSlipAsync(id);
+        if (slip == null)
+            return NotFound(new { success = false,
+                error = $"No payment slip for order {id}" });
+
+        // The file came from a customer: stop browsers guessing a riskier type.
+        Response.Headers.XContentTypeOptions = "nosniff";
+        return File(slip.ImageBytes, slip.MimeType);
+    }
 
     /// <summary>Cancel an order and restore stock</summary>
     [HttpPut("{id}/cancel")]

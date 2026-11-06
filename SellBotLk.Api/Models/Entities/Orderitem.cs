@@ -53,7 +53,7 @@ public class OrderItem
     /// Final agreed price per unit after AI negotiation, if any occurred.
     /// Null = no negotiation happened; the standard UnitPrice applies.
     /// NegotiationService sets this only when a counteroffer was accepted.
-    /// Must always be >= Product.MinPrice (enforced by NegotiationService).
+    /// Must always be >= Product.MinPrice (enforced by OrderService.CreateOrderAsync).
     /// </summary>
     [Column(TypeName = "decimal(10,2)")]
     public decimal? NegotiatedPrice { get; set; }

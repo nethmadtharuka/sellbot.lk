@@ -39,6 +39,18 @@ jobs:
   api:
     name: API (.NET build + test)
     runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -58,3 +70,5 @@ jobs:
 
       - name: Test
         run: dotnet test ./SellBotLk.Tests/SellBotLk.Tests.csproj --configuration Release
+        env:
+          SELLBOT_TEST_MYSQL: server=127.0.0.1;port=3306;user=root

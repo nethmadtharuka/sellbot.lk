@@ -26,6 +26,8 @@ public class AppDbContext : DbContext
     public DbSet<InventoryLog> InventoryLogs => Set<InventoryLog>();
     public DbSet<DailyReport> DailyReports => Set<DailyReport>();
     public DbSet<DeliveryZone> DeliveryZones => Set<DeliveryZone>();
+    public DbSet<PaymentSlip> PaymentSlips => Set<PaymentSlip>();
+    public DbSet<ProcessedWebhookMessage> ProcessedWebhookMessages => Set<ProcessedWebhookMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -51,6 +53,7 @@ public class AppDbContext : DbContext
             entity.HasIndex(o => o.CustomerId);
             entity.HasIndex(o => o.Status);
             entity.HasIndex(o => o.CreatedAt);
+            entity.HasIndex(o => o.PaymentReference).IsUnique();
 
             entity.Property(o => o.Status)
                   .HasConversion<string>();
@@ -125,6 +128,23 @@ public class AppDbContext : DbContext
                   .HasForeignKey(dr => dr.TopProductId)
                   .IsRequired(false)
                   .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // ── PaymentSlips ───────────────────────────────────────────────────
+        modelBuilder.Entity<PaymentSlip>(entity =>
+        {
+            entity.HasIndex(s => s.ImageSha256).IsUnique();
+
+            entity.HasOne(s => s.Order)
+                  .WithMany()
+                  .HasForeignKey(s => s.OrderId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── ProcessedWebhookMessages ───────────────────────────────────────
+        modelBuilder.Entity<ProcessedWebhookMessage>(entity =>
+        {
+            entity.HasIndex(m => m.ProcessedAt);
         });
 
         // ── Seed Data ──────────────────────────────────────────────────────

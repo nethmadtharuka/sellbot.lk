@@ -24,6 +24,7 @@ public class OrderResponseDto
     public string CustomerPhone { get; set; } = "";
     public string Status { get; set; } = "";
     public string PaymentStatus { get; set; } = "";
+    public string? PaymentReference { get; set; }
     public decimal TotalAmount { get; set; }
     public decimal DiscountAmount { get; set; }
     public string? DeliveryAddress { get; set; }
@@ -51,4 +52,9 @@ public class OrderItemResponseDto
 public class UpdateOrderStatusDto
 {
     public string Status { get; set; } = "";
+}
+
+public class RejectPaymentDto
+{
+    public string? Reason { get; set; }
 }

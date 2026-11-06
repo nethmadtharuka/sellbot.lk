@@ -548,6 +548,9 @@ namespace SellBotLk.Api.Data.Migrations
                     b.HasIndex("OrderNumber")
                         .IsUnique();
 
+                    b.HasIndex("PaymentReference")
+                        .IsUnique();
+
                     b.HasIndex("Status");
 
                     b.ToTable("Orders");
@@ -583,6 +586,60 @@ namespace SellBotLk.Api.Data.Migrations
                     b.HasIndex("ProductId");
 
                     b.ToTable("OrderItems");
+                });
+
+            modelBuilder.Entity("SellBotLk.Api.Models.Entities.PaymentSlip", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<byte[]>("ImageBytes")
+                        .IsRequired()
+                        .HasColumnType("longblob");
+
+                    b.Property<string>("ImageSha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("MimeType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<int>("OrderId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ImageSha256")
+                        .IsUnique();
+
+                    b.HasIndex("OrderId");
+
+                    b.ToTable("PaymentSlips");
+                });
+
+            modelBuilder.Entity("SellBotLk.Api.Models.Entities.ProcessedWebhookMessage", b =>
+                {
+                    b.Property<string>("MessageId")
+                        .HasMaxLength(191)
+                        .HasColumnType("varchar(191)");
+
+                    b.Property<DateTime>("ProcessedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("MessageId");
+
+                    b.HasIndex("ProcessedAt");
+
+                    b.ToTable("ProcessedWebhookMessages");
                 });
 
             modelBuilder.Entity("SellBotLk.Api.Models.Entities.Product", b =>
@@ -822,6 +879,17 @@ namespace SellBotLk.Api.Data.Migrations
                     b.Navigation("Order");
 
                     b.Navigation("Product");
+                });
+
+            modelBuilder.Entity("SellBotLk.Api.Models.Entities.PaymentSlip", b =>
+                {
+                    b.HasOne("SellBotLk.Api.Models.Entities.Order", "Order")
+                        .WithMany()
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Order");
                 });
 
             modelBuilder.Entity("SellBotLk.Api.Models.Entities.Customer", b =>
