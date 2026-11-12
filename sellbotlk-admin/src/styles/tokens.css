@@ -1,0 +1,138 @@
+/*
+ * SellBotLK design tokens. Single source of truth for colour, type, spacing, radius,
+ * elevation, z-index and breakpoints. Values were measured from the approved PNGs in
+ * /design (exported at 2x; numbers here are CSS px). Components must not hard-code values.
+ */
+:root {
+  /* ---- Brand ---- */
+  --c-green: #25d366;          /* WhatsApp neon green: primary buttons, DEMO pill, nav badges */
+  --c-green-600: #18b85a;
+  --c-green-700: #0e8a47;
+  --c-on-green: #03150a;       /* dark text on green */
+  --c-mint: #7ff0ae;           /* eyebrows, order ids on cards, links */
+  --c-success: #3dd68c;        /* Delivered / Paid / LIVE */
+
+  /* ---- Semantic accents (status palette) ---- */
+  --c-blue: #4cc3ff;
+  --c-violet: #a58bff;
+  --c-red: #ff7a82;
+  --c-amber: #ffb84d;
+  --c-neutral: #c9d3ea;
+
+  /* ---- Surfaces (dark) ---- */
+  --c-page: #000000;
+  --c-page-landing: #030905;
+  --c-surface: #0d0d0d;        /* cards, sidebar base */
+  --c-surface-2: #141414;      /* hero card edge, inputs */
+  --c-surface-3: #1a1a1a;      /* raised: inner tiles, neutral chips */
+  --c-surface-4: #202020;      /* secondary button, icon circles */
+  --c-input: #161616;
+  --c-border: rgba(255, 255, 255, 0.11);   /* measured #2a2a2a on #0d0d0d */
+  --c-border-strong: rgba(255, 255, 255, 0.18);
+  --c-divider: #1e2220;
+  --c-glass: rgba(255, 255, 255, 0.06);
+  --c-glass-border: rgba(255, 255, 255, 0.12);
+
+  /* ---- Text ---- */
+  --c-text: #ffffff;
+  --c-text-2: #c9d3ea;
+  --c-text-3: #8e9bb5;
+  --c-text-4: #6f7c96;
+  --c-text-banner: #bff5d6;
+
+  /* ---- Light section (landing "how it works") ---- */
+  --c-light-bg-1: #f1fbf5;
+  --c-light-bg-2: #d3f4df;
+  --c-light-card: #f6fdf8;
+  --c-light-ink: #0b1020;
+  --c-light-ink-2: #3f4a5e;
+  --c-light-green: #129a4e;
+  /* ---- Navy band (landing "built with") ---- */
+  --c-navy: #0a1020;
+  --c-navy-chip: #1b2130;
+  --c-navy-chip-border: #3a3f4c;
+  --c-navy-text: #d6dceb;
+
+  /* ---- Status badge fills (sampled) ---- */
+  --b-confirmed-bg: #082e16;   --b-confirmed-fg: #7ff0ae;
+  --b-processing-bg: #0e232e;  --b-processing-fg: #4cc3ff;
+  --b-dispatched-bg: #211e34;  --b-dispatched-fg: #a58bff;
+  --b-delivered-bg: #0c2e1c;   --b-delivered-fg: #3dd68c;
+  --b-cancelled-bg: #2f211d;   --b-cancelled-fg: #ff7a82;
+  --b-unpaid-bg: #302f15;      --b-unpaid-fg: #ffb84d;
+  --b-review-bg: #103035;      --b-review-fg: #4cc3ff;
+  --b-paid-bg: #0b2719;        --b-paid-fg: #3dd68c;
+  --b-pending-bg: #2e210e;     --b-pending-fg: #ffb84d;     /* never set: dashed */
+  --b-refunded-bg: #1a1a1a;    --b-refunded-fg: #c9d3ea;    /* never set: dashed */
+  --b-neutral-bg: #262a28;     --b-neutral-fg: #e6ebf5;
+  --b-violet-bg: #2b263d;      --b-violet-fg: #a58bff;
+
+  /* ---- Gradients & glows ---- */
+  --g-sidebar: linear-gradient(180deg, #16402a 0%, #10291b 22%, #0d0d0d 55%);
+  --g-banner: linear-gradient(90deg, #0c3a1f 0%, #06200f 40%, #041509 100%);
+  --g-kpi-green: linear-gradient(160deg, #0f5a2d 0%, #0a4422 45%, #06301a 100%);
+  --g-page-glow: radial-gradient(60% 45% at 18% 0%, rgba(24, 120, 62, 0.42) 0%, rgba(0, 0, 0, 0) 70%),
+    radial-gradient(45% 40% at 92% 100%, rgba(20, 110, 55, 0.35) 0%, rgba(0, 0, 0, 0) 70%);
+  --g-mobile: radial-gradient(90% 45% at 50% 0%, #0b3d20 0%, rgba(2, 19, 9, 0) 75%), radial-gradient(80% 40% at 50% 100%, #063019 0%, rgba(2, 19, 9, 0) 75%), #021309;
+  --glow-green: 0 0 24px rgba(37, 211, 102, 0.45);
+  --glow-green-soft: 0 6px 24px rgba(37, 211, 102, 0.28);
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.04) inset;
+  --shadow-light-card: 0 18px 40px rgba(14, 60, 35, 0.12);
+
+  /* ---- Typography ---- */
+  --f-display: 'Poppins', 'Noto Sans Sinhala', 'Noto Sans Tamil', system-ui, sans-serif;
+  --f-body: 'Inter', 'Noto Sans Sinhala', 'Noto Sans Tamil', system-ui, sans-serif;
+  --f-mono: 'Geist Mono', ui-monospace, 'Cascadia Mono', monospace;
+  --f-sinhala: 'Noto Sans Sinhala', 'Inter', sans-serif;
+  --f-tamil: 'Noto Sans Tamil', 'Inter', sans-serif;
+
+  --fs-10: 10px;  --fs-11: 11px;  --fs-12: 12px;  --fs-13: 13px;  --fs-14: 14px;
+  --fs-15: 15px;  --fs-16: 16px;  --fs-17: 17px;  --fs-18: 18px;  --fs-19: 19px;  --fs-20: 20px;
+  --fs-22: 22px;  --fs-24: 24px;  --fs-28: 28px;  --fs-33: 33px;  --fs-34: 34px;  --fs-40: 40px;
+  --fs-56: 56px;  --fs-59: 59px;  --fs-64: 64px;  --fs-68: 68px;  --fs-72: 72px;  --fs-92: 92px;
+  --fs-wordmark: 396px;
+  --track-tight: -0.03em;
+  --track-tighter: -0.045em;
+  --track-eyebrow: 0.14em;
+  --track-label: 0.1em;
+
+  /* ---- Spacing (4/8 rhythm) ---- */
+  --s-2: 2px;  --s-4: 4px;  --s-6: 6px;  --s-8: 8px;  --s-10: 10px; --s-12: 12px;
+  --s-14: 14px; --s-16: 16px; --s-18: 18px; --s-20: 20px; --s-24: 24px; --s-28: 28px;
+  --s-32: 32px; --s-40: 40px; --s-48: 48px; --s-56: 56px; --s-64: 64px; --s-80: 80px;
+
+  /* ---- Radius ---- */
+  --r-6: 6px; --r-8: 8px; --r-10: 10px; --r-12: 12px; --r-14: 14px; --r-16: 16px; --r-18: 18px;
+  --r-20: 20px; --r-24: 24px; --r-28: 28px; --r-32: 32px; --r-40: 40px; --r-pill: 999px;
+
+  /* ---- Layout ---- */
+  --shell-gap: 16px;           /* outer gap around sidebar */
+  --sidebar-w: 264px;
+  --rail-w: 72px;
+  --content-gutter: 24px;      /* sidebar -> content */
+  --content-right: 28px;
+  --banner-h: 46px;
+  --nav-item-h: 45px;
+  --control-h: 46px;           /* inputs, search */
+  --button-h: 40px;
+  --tab-h: 38px;
+  --landing-max: 1392px;       /* 1440 frame minus 24px margins */
+  --landing-margin: 24px;
+
+  /* ---- Motion (hover/focus only; scroll animation is a separate task) ---- */
+  --t-fast: 120ms;
+  --t-base: 180ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ---- Z-index ---- */
+  --z-sticky: 10;
+  --z-drawer: 40;
+  --z-modal: 50;
+  --z-toast: 60;
+
+  /* ---- Focus ---- */
+  --focus-ring: 0 0 0 2px #000, 0 0 0 4px var(--c-green);
+}
+
+/* Breakpoints (documented; CSS media queries cannot read custom properties):
+   desktop >= 1200 (sidebar 264) · tablet 768-1199 (icon rail 72) · mobile < 768 (drawer) */

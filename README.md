@@ -46,10 +46,10 @@ The business owner manages everything through a React admin dashboard with real-
 
 | Layer | Technology |
 |-------|------------|
-| Backend | ASP.NET Core 8, C# |
+| Backend | ASP.NET Core 10, C# |
 | AI | Google Gemini 2.5 Flash -- text intent parsing, product matching, multimodal vision |
 | Messaging | Meta WhatsApp Cloud API -- inbound webhooks + outbound messages (text, images, documents, interactive buttons, typing indicator) |
-| Database | MySQL 8 with Entity Framework Core (Pomelo) |
+| Database | MySQL 8 with Entity Framework Core 8 (Pomelo; stays on EF Core 8 until a MySQL provider for EF Core 10 is chosen) |
 | PDF Generation | QuestPDF -- auto-generated invoices sent via WhatsApp |
 | Frontend | React 19, TypeScript 6, Vite 8, Recharts |
 | Auth | JWT Bearer tokens (admin API), HMAC-SHA256 (webhook verification) |
@@ -144,7 +144,7 @@ SellBotLk/
 
 ### Prerequisites
 
-- .NET 8 SDK
+- .NET 10 SDK
 - Node.js 20+
 - MySQL 8
 - [Meta WhatsApp Business](https://developers.facebook.com/docs/whatsapp/cloud-api/get-started) app
