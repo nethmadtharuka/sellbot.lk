@@ -106,3 +106,20 @@ export type RecentOrderDto = {
   createdAt: string
 }
 
+
+export type ProductResponseDto = {
+  id: number
+  name: string
+  category: string
+  description?: string | null
+  price: number
+  bulkDiscountPercent: number
+  bulkMinQty: number
+  stockQty: number
+  color?: string | null
+  material?: string | null
+  style?: string | null
+  imageUrl?: string | null
+  isActive: boolean
+  isLowStock: boolean
+}

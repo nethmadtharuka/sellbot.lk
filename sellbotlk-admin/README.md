@@ -1,54 +1,38 @@
-# SellBotLk Admin Dashboard
+# SellBot.lk Console (frontend)
 
-Admin panel for managing the SellBotLk WhatsApp commerce platform. Built with React, TypeScript, and Vite.
+React 19 + TypeScript + Vite admin console and landing page for SellBotLK, built to the approved designs in `../design`.
 
-## Features
-
-- **Orders** — View, filter by status/customer, and drill into order details
-- **Order Details** — Inspect line items, payment status, delivery info, and update order state
-- **Delivery Zones** — Manage delivery areas and zone configuration
-
-## Tech Stack
-
-- React 19 + TypeScript
-- React Router v7
-- Vite 8 (dev server + build)
-- ESLint with TypeScript rules
-
-## Getting Started
-
-### Prerequisites
-
-- Node.js 20+
-- The SellBotLk API running locally (default `http://localhost:5028`)
-
-### Setup
+## Run
 
 ```bash
-# Install dependencies
 npm install
-
-# Copy and configure environment
-cp .env.example .env
-# Edit .env if your API runs on a different port
-
-# Start dev server
-npm run dev
+cp .env.example .env      # VITE_DATA_MODE=demo|live
+npm run dev               # http://localhost:5173
 ```
 
-The dashboard will be available at `http://localhost:5173`.
+- **Demo mode** (default): fictional data from `src/data/demo.ts`; nothing calls the API; changes reset on reload.
+- **Live mode** (`VITE_DATA_MODE=live`): uses the real API at `VITE_API_BASE_URL` and requires the owner sign-in.
+  Screens the backend has no endpoint for (customers, inbox, documents list, customer-language chart) still use the
+  mock layer and are marked "Simulated".
 
-### Available Scripts
+## Checks
 
-| Script | Description |
-|--------|-------------|
-| `npm run dev` | Start Vite dev server with HMR |
-| `npm run build` | Type-check and build for production |
-| `npm run lint` | Run ESLint |
-| `npm run preview` | Preview production build locally |
+```bash
+npm run typecheck   # tsc -b (strict)
+npm run lint
+npm test            # node:test via Vite's module loader (no extra packages)
+npm run build
+```
 
-## Environment Variables
+## Structure
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `VITE_API_BASE_URL` | `http://localhost:5028` | Base URL of the SellBotLk API |
+| Path | Purpose |
+|---|---|
+| `src/styles/tokens.css` | All design tokens (colour, type, spacing, radius, glow, z-index) |
+| `src/ui/` | Design-system components, icons (Lucide paths, Simple Icons WhatsApp glyph) |
+| `src/layouts/` | Admin shell (sidebar / rail / drawer) and presentation layout |
+| `src/pages/` | One file per designed page |
+| `src/data/` | `DataSource` interface, `liveSource` (real API), `demoSource` + `demo.ts` (mock layer) |
+| `src/assets/fonts/` | Self-hosted Poppins, Inter, Geist Mono, Noto Sans Sinhala/Tamil (OFL) |
+
+Design parity status: see `DESIGN_PARITY.md`.
