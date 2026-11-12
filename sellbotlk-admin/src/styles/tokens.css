@@ -116,7 +116,6 @@
   --control-h: 46px;           /* inputs, search */
   --button-h: 40px;
   --tab-h: 38px;
-  --landing-max: 1392px;       /* 1440 frame minus 24px margins */
   --landing-margin: 24px;
 
   /* ---- Motion (hover/focus only; scroll animation is a separate task) ---- */

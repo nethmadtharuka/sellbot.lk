@@ -60,7 +60,7 @@ the soft glows, and the items listed under "Known differences".
 
 | Width | Source | Status |
 |---|---|---|
-| >= 1200 | desktop boards | verified at 1280, 1440, 1920 (shell capped at 1440 and centred; no overflow) |
+| >= 1200 | desktop boards | verified at 1280, 1366, 1440, 1920, 2560: shell spans the full window (see below); geometry at 1440 unchanged |
 | 768-1199 | TabletOverview + Layouts (rail 72) | Overview verified; other pages **extrapolated** (rail, single-column grids) |
 | < 768 | MobileOrders, MobileLogin + Layouts (drawer) | those two verified; all other pages **extrapolated** (top bar + drawer, stacked cards, scrollable tables) |
 | 375 | brief requirement | all 21 routes: no horizontal page scroll (measured `scrollWidth`) |
@@ -73,3 +73,51 @@ the soft glows, and the items listed under "Known differences".
 - Documents: the white pill under the invoice is blank in the board; it is reproduced blank with an accessible name and shows a "Simulated" toast.
 - Overview "Revenue · last 14 days" chart is drawn as SVG (same line, fill and points); Recharts' responsive container logs console warnings, so it is no longer used.
 - Layouts board is a specification sheet; it is implemented as the working shell rather than as its own route.
+- Home navigation (requested change): the first nav item is labelled "Home" with a house icon; the boards label it "Overview". See below.
+
+## Full-viewport fix and Home navigation (12 Nov 2026)
+
+**Cause.** `.shell` in `src/styles/shell.css` had `max-width: 1440px; margin: 0 auto`, so on any window wider
+than 1440 px the whole admin was boxed into a centred 1440 px column with empty bands on both sides.
+Height was not limited (`min-height: 100vh`), but the sidebar and rail used `100vh`, which on mobile Chrome
+includes the collapsing URL bar.
+
+**Fix.** Removed the width cap and centring from `.shell`. The shell, background, sidebar and rail now use
+`100dvh` with a `100vh` fallback. No other layout or styling changed.
+
+**Home.** The first nav item is now **Home** (Lucide `house` icon) and opens the existing Overview page (`/app`).
+It is the item previously labelled "Overview", relabelled rather than duplicated, so only one item highlights
+on `/app`. It appears in the desktop sidebar, the tablet rail (icon with tooltip) and the mobile drawer; the
+mobile top-bar title reads "Home" on that page. The Overview page itself is unchanged.
+
+**Measured in headless Edge (same-origin iframe at each size):**
+
+| Viewport | Navigation | Sidebar / rail / top bar | Main column | Page scroll width | Active item on /app |
+|---|---|---|---|---|---|
+| 2560 x 1440 | sidebar | x 16-280, y 16-1424 | x 304-2532 | 2560 (no overflow) | Home |
+| 1920 x 1080 | sidebar | x 16-280, y 16-1064 | x 304-1892 | 1920 | Home |
+| 1440 x 900 | sidebar | x 16-280, y 16-884 | x 304-1412 (as designed) | 1440 | Home |
+| 1366 x 768 | sidebar | x 16-280, y 16-752 | x 304-1338 | 1366 | Home |
+| 1280 x 800 | sidebar | x 16-280, y 16-784 | x 304-1252 | 1280 | Home |
+| 834 x 1194 | rail | x 16-88, y 16-1178 | x 104-814 | 834 | Home |
+| 390 x 844 | top bar + drawer | x 0-390, y 0-60 | x 16-374 | 390 | Home |
+| 375 x 667 | top bar + drawer | x 0-375, y 0-60 | x 16-359 | 375 | Home |
+
+On `/app/orders` and `/app/analytics` the active item is Orders / Analytics, and Home is not highlighted.
+Overview re-diffed at the board size after the change: mean 10.5, 4.7% of pixels over 40 (before: 10.6 / 4.6%).
+Checks: `tsc -b` passes, `eslint` clean, `npm test` 14/14, `vite build` passes.
+
+## Landing and presentation pages full width (12 Nov 2026)
+
+**Cause.** `.landing > section` had `max-width: 1392px; margin: 0 auto`, and the presentation pages capped
+`.sc-nav` / `.sc-main` at 1344 px, so on windows wider than the 1440 board the cards were centred with empty
+space at both sides.
+
+**Fix.** Removed those caps (the 24 px landing margin and 48 px presentation padding from the boards stay).
+Because the hero card now widens, the three floating chips are anchored to the card centre using the offsets
+measured on the 1375 px design card, and the green arc scales with the card (`max(1552px, 113%)`) so its
+sides still meet the card edges. Headline, wordmark and section type keep their designed sizes.
+
+**Verified.** Landing re-diffed at the board size: mean 11.38, 4.8% (unchanged). Screenshots at 1838 px show
+edge-to-edge cards; all 21 routes at 1838 and 2560 px have no horizontal overflow (the arc is clipped inside the
+hero card). Checks: `tsc -b`, `eslint`, `npm test` 14/14 and `vite build` pass.

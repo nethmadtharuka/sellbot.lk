@@ -1,7 +1,7 @@
 /* ============================================================ Presentation pages: Architecture, API, Security */
 .showcase { min-height: 100vh; background-color: #000; background-image: var(--g-page-glow); background-attachment: fixed; padding: 24px 48px 64px; }
 .sc-nav {
-  display: flex; justify-content: space-between; align-items: center; max-width: 1344px; height: 61px; margin: 0 auto; padding: 0 12px 0 24px;
+  display: flex; justify-content: space-between; align-items: center; height: 61px; margin: 0 auto; padding: 0 12px 0 24px;
   border-radius: var(--r-pill); background: rgba(255, 255, 255, 0.05); border: 1px solid var(--c-border-strong); backdrop-filter: blur(14px);
 }
 .sc-nav__brand { font-family: var(--f-display); font-weight: 600; font-size: var(--fs-18); letter-spacing: -0.01em; }
@@ -9,7 +9,7 @@
 .sc-nav__link { font-size: var(--fs-14); color: var(--c-text-2); transition: color var(--t-fast) var(--ease); }
 .sc-nav__link:hover { color: var(--c-text); }
 .sc-nav__cta { justify-self: end; height: 37px; padding: 0 22px; }
-.sc-main { max-width: 1344px; margin: 0 auto; }
+.sc-main { margin: 0 auto; }
 .sc-hero { text-align: center; padding-top: 58px; }
 .sc-hero .eyebrow { margin-bottom: 10px; }
 .sc-title { font-family: var(--f-display); font-weight: 500; font-size: var(--fs-68); line-height: 70px; letter-spacing: var(--track-tighter); }

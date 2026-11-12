@@ -7,7 +7,8 @@ import { ModeBanner } from '../ui/primitives'
 
 type NavItem = { to: string; label: string; icon: IconName; badge?: 'payments' | 'products' }
 const NAV: NavItem[] = [
-  { to: '/app', label: 'Overview', icon: 'layout-grid' },
+  // Home is the Overview page (/app); it is active only on /app itself.
+  { to: '/app', label: 'Home', icon: 'house' },
   { to: '/app/orders', label: 'Orders', icon: 'shopping-bag' },
   { to: '/app/payments', label: 'Payments', icon: 'credit-card', badge: 'payments' },
   { to: '/app/delivery', label: 'Delivery', icon: 'truck' },
@@ -28,7 +29,7 @@ function activeNavFor(path: string): string {
 }
 function titleFor(path: string): string {
   if (path.startsWith('/app/journey')) return 'Order journey'
-  return NAV.find((n) => n.to === activeNavFor(path))?.label ?? 'Overview'
+  return NAV.find((n) => n.to === activeNavFor(path))?.label ?? 'Home'
 }
 
 function useNavCounts() {
