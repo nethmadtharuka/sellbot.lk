@@ -1,11 +1,11 @@
 /* ============================================================ Landing (designed at 1440, min 1280) */
 .landing { background: var(--c-page-landing); padding: var(--landing-margin); display: flex; flex-direction: column; gap: 26px; min-width: 0; }
-.landing > section { width: 100%; max-width: var(--landing-max); margin: 0 auto; border-radius: var(--r-40); position: relative; }
+.landing > section { width: 100%; margin: 0 auto; border-radius: var(--r-40); position: relative; }
 
 /* ---- Hero card ---- */
 .hero { height: 1500px; overflow: hidden; background: #000; border: 1px solid rgba(255, 255, 255, 0.06); isolation: isolate; }
 .hero__arc {
-  position: absolute; z-index: -1; left: 50%; top: 561px; width: 1552px; height: 1552px; transform: translateX(-50%);
+  position: absolute; z-index: -1; left: 50%; top: 561px; width: max(1552px, 113%); aspect-ratio: 1; transform: translateX(-50%);
   border-radius: 50%; border: 118px solid #23c65f; filter: blur(34px); opacity: 0.98;
 }
 .hero::before { /* top green haze behind the nav */
@@ -41,14 +41,15 @@
 }
 .float-chip__label { font-size: var(--fs-11); font-weight: 500; letter-spacing: 0.12em; color: #9fdcb8; }
 .float-chip__text { margin-top: 8px; font-size: var(--fs-15); line-height: 20px; }
-.float-chip--guard { left: 1003px; top: 924px; width: 330px; transform: rotate(3.5deg); }
-.float-chip--lang { left: 151px; top: 1006px; width: 342px; transform: rotate(-4deg); background: linear-gradient(105deg, rgba(24, 24, 24, 0.94), rgba(18, 18, 18, 0.9)); }
+/* Chips are anchored to the card centre (offsets measured on the 1375 px design card). */
+.float-chip--guard { left: calc(50% + 316px); top: 924px; width: 330px; transform: rotate(3.5deg); }
+.float-chip--lang { left: calc(50% - 537px); top: 1006px; width: 342px; transform: rotate(-4deg); background: linear-gradient(105deg, rgba(24, 24, 24, 0.94), rgba(18, 18, 18, 0.9)); }
 .float-chip__row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
 .float-chip__tag { display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: var(--r-pill); background: #2a2a2a; font-size: var(--fs-13); }
 .float-chip__tag--violet { background: #3a335c; color: #e6e0ff; }
 .float-chip__conf { font-size: var(--fs-13); color: #d6dceb; }
 .float-chip--tests {
-  left: 1032px; top: 1168px; width: 312px; display: flex; align-items: center; gap: 14px; padding: 16px 20px; transform: rotate(-4deg);
+  left: calc(50% + 345px); top: 1168px; width: 312px; display: flex; align-items: center; gap: 14px; padding: 16px 20px; transform: rotate(-4deg);
   background: linear-gradient(110deg, rgba(20, 20, 20, 0.95) 0%, rgba(22, 22, 22, 0.9) 60%, rgba(235, 240, 238, 0.32) 100%);
 }
 .ring { position: relative; display: grid; place-items: center; width: 52px; height: 52px; flex: none; }

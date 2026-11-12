@@ -1,10 +1,10 @@
 /* ============================================================ Admin shell
    desktop >= 1200: sidebar 264 · tablet 768-1199: icon rail 72 · mobile < 768: top bar + drawer */
-.admin-bg { min-height: 100vh; background: var(--c-page); background-image: var(--g-page-glow); background-attachment: fixed; }
+.admin-bg { min-height: 100vh; min-height: 100dvh; background: var(--c-page); background-image: var(--g-page-glow); background-attachment: fixed; }
 .shell {
   display: grid; grid-template-columns: var(--sidebar-w) minmax(0, 1fr); column-gap: var(--content-gutter);
-  max-width: 1440px; margin: 0 auto; padding: var(--shell-gap) var(--content-right) var(--shell-gap) var(--shell-gap);
-  min-height: 100vh;
+  padding: var(--shell-gap) var(--content-right) var(--shell-gap) var(--shell-gap);
+  min-height: 100vh; min-height: 100dvh;
 }
 .skip-link { position: absolute; left: -9999px; top: 8px; z-index: var(--z-toast); padding: 8px 14px; border-radius: var(--r-pill); background: #fff; color: #000; }
 .skip-link:focus { left: 16px; }
@@ -12,7 +12,7 @@
 /* ---- Sidebar ---- */
 .sidebar {
   position: sticky; top: var(--shell-gap); align-self: start;
-  height: calc(100vh - 2 * var(--shell-gap)); min-height: 600px;
+  height: calc(100vh - 2 * var(--shell-gap)); height: calc(100dvh - 2 * var(--shell-gap)); min-height: 600px;
   display: flex; flex-direction: column; justify-content: space-between;
   padding: 21px 10px 20px 15px; border-radius: var(--r-32);
   background: var(--g-sidebar); border: 1px solid var(--c-border);
@@ -72,7 +72,7 @@
   .sidebar { display: none; }
   .rail {
     display: flex; flex-direction: column; position: sticky; top: var(--shell-gap); align-self: start;
-    height: calc(100vh - 2 * var(--shell-gap)); padding: 17px 0; border-radius: var(--r-pill);
+    height: calc(100vh - 2 * var(--shell-gap)); height: calc(100dvh - 2 * var(--shell-gap)); padding: 17px 0; border-radius: var(--r-pill);
     background: linear-gradient(180deg, #0f1a14 0%, #0d0d0d 30%); border: 1px solid var(--c-border);
   }
 }
