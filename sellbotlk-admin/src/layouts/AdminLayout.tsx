@@ -93,19 +93,22 @@ export function AdminLayout() {
       <a className="skip-link" href="#main">Skip to content</a>
       <aside className="sidebar" aria-label="Admin navigation">
         <nav aria-label="Primary"><NavList variant="full" active={active} counts={counts} /></nav>
-        {showAbout && (
-          <div className="about-card">
-            <p className="about-card__title">About this project</p>
-            <p className="about-card__links">
-              <Link to="/app/journey">Journey</Link> · <Link to="/architecture">Architecture</Link> · <Link to="/api">API</Link> ·{' '}
-              <Link to="/security">Security</Link>
-            </p>
-          </div>
-        )}
+        <div className="sidebar__foot">
+          {showAbout && (
+            <div className="about-card">
+              <p className="about-card__title">About this project</p>
+              <p className="about-card__links">
+                <Link to="/app/journey">Journey</Link> · <Link to="/architecture">Architecture</Link> · <Link to="/api">API</Link> ·{' '}
+                <Link to="/security">Security</Link>
+              </p>
+            </div>
+          )}
+          <Link to="/" className="nav__item nav__item--site"><Icon name="arrow-left" size={20} /><span className="nav__label">Back to site</span></Link>
+        </div>
       </aside>
 
       <aside className="rail" aria-label="Admin navigation">
-        <Link to="/" className="rail__logo" aria-label="SellBot.lk home"><Icon name="message-circle" size={22} strokeWidth={2} /></Link>
+        <Link to="/" className="rail__logo" aria-label="Back to site" data-tooltip="Back to site"><Icon name="message-circle" size={22} strokeWidth={2} /></Link>
         <nav aria-label="Primary"><NavList variant="rail" active={active} counts={counts} /></nav>
       </aside>
 
@@ -121,10 +124,11 @@ export function AdminLayout() {
         <div className="nav-drawer" onMouseDown={(e) => { if (e.target === e.currentTarget) setDrawer(false) }}>
           <div className="nav-drawer__panel" role="dialog" aria-modal="true" aria-label="Navigation">
             <div className="nav-drawer__head">
-              <span className="brand-mini"><WhatsAppGlyph size={18} /> SellBot.lk</span>
+              <Link to="/" className="brand-mini" onClick={() => setDrawer(false)} aria-label="SellBot.lk, back to site"><WhatsAppGlyph size={18} /> SellBot.lk</Link>
               <button type="button" className="icon-btn" aria-label="Close navigation" onClick={() => setDrawer(false)}><Icon name="x" size={22} /></button>
             </div>
             <nav aria-label="Primary"><NavList variant="drawer" active={active} counts={counts} onNavigate={() => setDrawer(false)} /></nav>
+            <Link to="/" className="nav__item nav__item--site nav-drawer__site" onClick={() => setDrawer(false)}><Icon name="arrow-left" size={18} /><span className="nav__label">Back to site</span></Link>
           </div>
         </div>
       )}

@@ -1,3 +1,5 @@
+import { useShowcaseMotion } from '../motion/showcaseMotion'
+import { Count } from '../ui/Count'
 const NUMS = [
   { value: 80, label: 'automated tests' },
   { value: 63, label: 'integration' },
@@ -7,6 +9,7 @@ const PROTECTIONS = ['Owner sign in with attempt limits', 'Secrets live on the s
 const TESTED = ['Price and negotiation rules', 'Stock changes on order and cancel', 'Order and payment status flow', 'Language and intent handling']
 
 export default function Security() {
+  useShowcaseMotion()
   return (
     <>
       <section className="sc-hero" data-anim="hero" aria-labelledby="sec-t">
@@ -17,7 +20,7 @@ export default function Security() {
       <div className="nums">
         {NUMS.map((n) => (
           <div key={n.label} className="num-card" data-anim="num">
-            <p className="num-card__value">{n.value}</p>
+            <p className="num-card__value"><Count value={n.value} /></p>
             <p className="num-card__label">{n.label}</p>
           </div>
         ))}

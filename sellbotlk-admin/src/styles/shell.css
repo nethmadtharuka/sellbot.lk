@@ -93,3 +93,8 @@
   .page-head { margin: 12px 0 12px; align-items: stretch; }
   .page-head__right { width: 100%; }
 }
+
+/* "Back to site" (landing page) link: bottom of the sidebar and of the mobile drawer */
+.sidebar__foot { display: flex; flex-direction: column; gap: 12px; }
+.nav__item--site { color: var(--c-text-3); }
+.nav-drawer__site { margin-top: 12px; border-top: 1px solid var(--c-border); border-radius: 0; padding-top: 4px; height: 52px; font-size: var(--fs-14); font-weight: 400; }

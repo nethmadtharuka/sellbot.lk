@@ -1,0 +1,68 @@
+/* ============================================================ Motion layer
+   Everything here is either structural (the hero wrapper keeps the original look) or only shows
+   when motion JS is running (.is-motion) or in reduced-motion static form (.is-motion-reduced).
+   With motion off the page renders exactly as designed. */
+
+.landing { overflow-x: clip; }
+.count { font-variant-numeric: tabular-nums; }
+
+/* Hero is wrapped (frame -> inner -> hero); keep the section rules it had as a direct child. */
+.hero-frame { position: relative; z-index: 1; width: 100%; }
+.hero-frame__inner { position: relative; }
+.hero-frame .hero { width: 100%; border-radius: var(--r-40); position: relative; }
+.landing > .how { z-index: 2; }
+.landing > .pick { z-index: 3; }
+.landing > .built { z-index: 4; }
+@media (max-width: 767px) { .hero-frame .hero { border-radius: var(--r-28); } }
+
+
+/* 3.6 nav restyle (state toggle) */
+.hero-nav__pill { transition: background-color var(--t-base) var(--ease), border-color var(--t-base) var(--ease); }
+.hero-nav__link { transition: color var(--t-base) var(--ease), background-color var(--t-base) var(--ease); }
+.hero-nav__pill.is-light { background: rgba(255, 255, 255, 0.94); border-color: rgba(255, 255, 255, 0.9); }
+.hero-nav__pill.is-light .hero-nav__link { color: var(--c-light-ink); }
+.hero-nav__pill.is-light .hero-nav__link.is-active { background: var(--c-light-ink); color: #fff; }
+
+/* 3.7 word masks for line reveals (split only when motion runs) */
+.mw { display: inline-block; overflow: hidden; vertical-align: top; padding-bottom: 0.14em; margin-bottom: -0.14em; }
+.mw__i { display: inline-block; }
+
+/* 3.2 glass sheen: one fixed, non-interactive overlay (desktop/tablet only) */
+.sheen {
+  display: none; position: fixed; inset: -20% -10%; z-index: 30; pointer-events: none; opacity: 0.06; mix-blend-mode: screen;
+  background: linear-gradient(115deg, transparent 34%, rgba(127, 240, 174, 0.9) 47%, rgba(255, 255, 255, 0.55) 50%, transparent 63%);
+}
+@media (min-width: 768px) { .is-motion .sheen { display: block; } }
+
+/* 3.3 pulsing circular-arrow ring behind the centre card (time-based loop, paused out of view) */
+.how__stage { position: relative; }
+.is-motion .how { overflow: clip; } /* cards fly in from the sides: clip them to the light sheet */
+.how__stage .how__cards { position: relative; z-index: 1; }
+.how-ring {
+  display: none; position: absolute; left: 50%; top: 52%; width: 440px; height: 440px; translate: -50% -50%; z-index: 0;
+  border-radius: 50%; border: 2px solid rgba(37, 211, 102, 0.28); border-right-color: transparent; opacity: 0.5;
+  animation: ring-pulse 2.4s ease-in-out infinite alternate; animation-play-state: paused;
+}
+.how-ring::after { /* arrow head */
+  content: ''; position: absolute; right: 26px; top: 56px; width: 0; height: 0;
+  border-left: 9px solid transparent; border-right: 9px solid transparent; border-top: 14px solid rgba(37, 211, 102, 0.4); rotate: 35deg;
+}
+.how-ring.is-live { animation-play-state: running; }
+@keyframes ring-pulse { from { scale: 1; opacity: 0.5; } to { scale: 1.08; opacity: 1; } }
+@media (min-width: 768px) { .is-motion .how-ring { display: block; } }
+
+/* 3.9 ticker pill + icon next to "Pick where to start" */
+.pick__row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 18px; }
+.ticker {
+  display: none; position: relative; height: 58px; padding: 0 22px; border-radius: var(--r-pill); overflow: hidden;
+  background: var(--c-green); color: var(--c-on-green); font-family: var(--f-display); font-weight: 500; font-size: var(--fs-28); margin-top: 10px;
+}
+.ticker__word { position: absolute; left: 22px; top: 50%; translate: 0 -56%; /* Poppins sits low at line-height 1 */ line-height: 1; white-space: nowrap; }
+.pick__icon { display: none; margin-top: 10px; }
+.is-motion .ticker { display: inline-block; }
+.is-motion .pick__icon, .is-motion-reduced .pick__icon { display: grid; }
+/* Reduced motion: static pill with the first word, no rotation */
+.is-motion-reduced .ticker { display: inline-flex; align-items: center; }
+.is-motion-reduced .ticker__word { position: static; translate: none; }
+.is-motion-reduced .ticker__word:not(:first-child) { display: none; }
+@media (max-width: 900px) { .ticker { height: 44px; font-size: var(--fs-20); padding: 0 16px; } .ticker__word { left: 16px; } }

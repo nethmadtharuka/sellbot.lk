@@ -1,3 +1,4 @@
+import { useShowcaseMotion } from '../motion/showcaseMotion'
 /** Simplified, illustrative surface exactly as the design presents it (not the full reference). */
 const ROUTES: { method: 'GET' | 'POST' | 'PATCH'; path: string; desc: string }[] = [
   { method: 'POST', path: '/webhook', desc: 'Receives WhatsApp messages' },
@@ -9,6 +10,7 @@ const ROUTES: { method: 'GET' | 'POST' | 'PATCH'; path: string; desc: string }[]
 ]
 
 export default function Api() {
+  useShowcaseMotion()
   return (
     <>
       <section className="sc-hero" data-anim="hero" aria-labelledby="api-t">

@@ -3,8 +3,8 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { getToken } from './api/http'
 import { MODE } from './data'
 import { AdminLayout } from './layouts/AdminLayout'
-import { ShowcaseLayout } from './layouts/ShowcaseLayout'
 
+const ShowcaseLayout = lazy(() => import('./layouts/ShowcaseLayout').then((m) => ({ default: m.ShowcaseLayout })))
 const Landing = lazy(() => import('./pages/Landing'))
 const Login = lazy(() => import('./pages/Login'))
 const Overview = lazy(() => import('./pages/Overview'))
