@@ -73,6 +73,7 @@ the soft glows, and the items listed under "Known differences".
 - Documents: the white pill under the invoice is blank in the board; it is reproduced blank with an accessible name and shows a "Simulated" toast.
 - Overview "Revenue · last 14 days" chart is drawn as SVG (same line, fill and points); Recharts' responsive container logs console warnings, so it is no longer used.
 - Layouts board is a specification sheet; it is implemented as the working shell rather than as its own route.
+- "Back to site" (requested change): a link to the landing page (`/`) at the bottom of the desktop sidebar and of the mobile drawer; the mobile drawer brand and the tablet rail logo also link there (rail logo has a "Back to site" tooltip). Not drawn on the boards.
 - Home navigation (requested change): the first nav item is labelled "Home" with a house icon; the boards label it "Overview". See below.
 
 ## Full-viewport fix and Home navigation (12 Nov 2026)
@@ -121,3 +122,22 @@ sides still meet the card edges. Headline, wordmark and section type keep their 
 **Verified.** Landing re-diffed at the board size: mean 11.38, 4.8% (unchanged). Screenshots at 1838 px show
 edge-to-edge cards; all 21 routes at 1838 and 2560 px have no horizontal overflow (the arc is clipped inside the
 hero card). Checks: `tsc -b`, `eslint`, `npm test` 14/14 and `vite build` pass.
+
+## Scroll motion layer (13 Nov 2026)
+
+GSAP 3.15.1 (+ ScrollTrigger) and Lenis 1.3.27, on the landing page and the Architecture / API / Security
+pages only (the admin console keeps native scrolling and never loads the motion chunk). All values live in
+`src/motion/motionConfig.ts`.
+
+| Check | Result |
+|---|---|
+| `?motion=off` (or `motionConfig.enabled = false`) vs Main board | mean 11.38, 4.8% — identical to before the motion work |
+| Reduced motion (forced in Edge) | full page visible in final state; ticker shows a static first word |
+| Scroll sequence 1440 x 900 (0 / 300 / 900 / 1300 / 1800 / 2300 / 3050 / end) | hero as designed at 0 (tilt and ghost layers removed on request, 13 Nov; top-of-page diff vs board 7.5); expanding to full width with copy exit; how sheet over pinned hero; cards converge while pinned; composed cards + ring; ticker + icon; built sheet over dimmed pick |
+| Horizontal overflow, motion on, 21 routes at 375 and 1440 px | none |
+| Console errors/warnings, motion on, same routes | none |
+| Not verified | 4x CPU-throttled frame timing (no DevTools performance panel in headless); hand-scrolling feel; real touch devices |
+
+Skipped because SellBotLK has no matching element: 3.4 (phone screen swap; the hero phone was removed by design),
+3.11 (segmented tab scenes; no single-step-at-a-time content), the accordion half of 3.13, and the thumbnails/tags
+half of 3.10. The hero nav is not sticky in the design, so 3.6 restyles it only at the hero expansion threshold.

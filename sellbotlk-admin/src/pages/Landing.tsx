@@ -1,7 +1,12 @@
+import { useLayoutEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { MODE } from '../data'
+import { motionMode, useSmoothScroll } from '../motion/core'
+import { initLanding } from '../motion/landingMotion'
+import { Count } from '../ui/Count'
 import { Icon, WhatsAppGlyph } from '../ui/Icon'
 import '../styles/landing.css'
+import '../styles/motion.css'
 
 const GITHUB_URL = 'https://github.com/nethmadtharuka/sellbot.lk'
 const ENTER = MODE === 'live' ? '/login' : '/app'
@@ -9,8 +14,16 @@ const ENTER = MODE === 'live' ? '/login' : '/app'
 const STACK = ['ASP.NET Core 10', 'EF Core + MySQL 8', 'Google Gemini', 'WhatsApp Cloud API', 'React 19', 'TypeScript', 'Vite', 'Recharts', 'xUnit', 'GitHub Actions']
 
 export default function Landing() {
+  const root = useRef<HTMLDivElement>(null)
+  useSmoothScroll(true)
+  // Layout effect: initial animation states are set before the first paint (no flash).
+  useLayoutEffect(() => (root.current ? initLanding(root.current, motionMode()) : undefined), [])
   return (
-    <div className="landing">
+    <div className="landing" ref={root}>
+      {/* Motion-only decoration (hidden unless motion runs): glass sheen */}
+      <div className="sheen" aria-hidden="true" />
+      <div className="hero-frame">
+      <div className="hero-frame__inner">
       <section className="hero" data-anim="hero" aria-labelledby="hero-title">
         <div className="hero__arc" aria-hidden="true" />
         <header className="hero-nav">
@@ -53,18 +66,22 @@ export default function Landing() {
           </p>
         </aside>
         <aside className="float-chip float-chip--tests" data-anim="chip-3" aria-label="Tests">
-          <span className="ring" aria-hidden="true"><svg viewBox="0 0 52 52" width="52" height="52"><circle cx="26" cy="26" r="22" /><circle cx="26" cy="26" r="22" className="ring__arc" /></svg><b>80</b></span>
-          <span><span className="float-chip__strong">Tests</span><span className="float-chip__small">63 integration · 17 unit</span></span>
+          <span className="ring" aria-hidden="true"><svg viewBox="0 0 52 52" width="52" height="52"><circle cx="26" cy="26" r="22" /><circle cx="26" cy="26" r="22" className="ring__arc" /></svg><b><Count value={80} /></b></span>
+          <span><span className="float-chip__strong">Tests</span><span className="float-chip__small"><Count value={63} /> integration · <Count value={17} /> unit</span></span>
         </aside>
 
         <p className="wordmark" aria-hidden="true" data-anim="wordmark">SellBot</p>
       </section>
+      </div>
+      </div>
 
       <section className="how" data-anim="how" aria-labelledby="how-title">
         <div className="how__head">
           <h2 id="how-title" className="how__title">A platform that talks to customers <em>in their own language</em></h2>
           <p className="how__lede">Three steps from a WhatsApp message to a paid, delivered order. Every step runs in the real code.</p>
         </div>
+        <div className="how__stage">
+        <div className="how-ring" aria-hidden="true" />
         <ol className="how__cards">
           <li className="how-card" data-anim="how-card">
             <span className="how-card__num mono">01</span>
@@ -83,17 +100,27 @@ export default function Landing() {
             <p className="how-card__body">Orders, payment-slip review, delivery and stock in one admin. AI can never mark an order paid.</p>
           </li>
         </ol>
+        </div>
       </section>
 
       <section className="pick" data-anim="pick" aria-labelledby="pick-title">
-        <p className="eyebrow pick__eyebrow">Explore the project</p>
-        <h2 id="pick-title" className="pick__title">Pick where to start</h2>
+        <div className="pick__head">
+          <p className="eyebrow pick__eyebrow">Explore the project</p>
+          <div className="pick__row">
+            <h2 id="pick-title" className="pick__title">Pick where to start</h2>
+            {/* Motion-only ticker of the tile's existing languages, plus the WhatsApp tile dropping in */}
+            <span className="ticker" role="img" aria-label="Sinhala, Tamil, English">
+              {['Sinhala', 'Tamil', 'English'].map((w) => <span key={w} className="ticker__word" aria-hidden="true">{w}</span>)}
+            </span>
+            <span className="brand__tile pick__icon" aria-hidden="true"><WhatsAppGlyph size={22} /></span>
+          </div>
+        </div>
         <div className="pick__tiles">
           <article className="tile tile--1" data-anim="tile">
             <span className="tile__num mono">01</span>
             <h3 className="tile__title">Admin dashboard</h3>
             <p className="tile__body">Orders, payment review, delivery board, products and analytics, on fictional data.</p>
-            <div className="tile__foot"><span className="tile__meta">14 pages</span><Link to={ENTER} className="btn btn--white btn--md tile__open" aria-label="Open admin dashboard">Open</Link></div>
+            <div className="tile__foot"><span className="tile__meta"><Count value={14} /> pages</span><Link to={ENTER} className="btn btn--white btn--md tile__open" aria-label="Open admin dashboard">Open</Link></div>
           </article>
           <article className="tile tile--2" data-anim="tile">
             <span className="tile__num mono">02</span>
@@ -105,7 +132,7 @@ export default function Landing() {
             <span className="tile__num mono">03</span>
             <h3 className="tile__title">Engineering</h3>
             <p className="tile__body">Architecture, API reference, webhook defences and the tests that prove them.</p>
-            <div className="tile__foot"><span className="tile__meta">80 tests</span><Link to="/architecture" className="btn btn--white btn--md tile__open" aria-label="Open engineering">Open</Link></div>
+            <div className="tile__foot"><span className="tile__meta"><Count value={80} /> tests</span><Link to="/architecture" className="btn btn--white btn--md tile__open" aria-label="Open engineering">Open</Link></div>
           </article>
         </div>
       </section>

@@ -1,3 +1,4 @@
+import { useShowcaseMotion } from '../motion/showcaseMotion'
 const FLOW = [
   { title: 'WhatsApp', desc: 'Customer message in Sinhala, Tamil or English' },
   { title: 'Webhook', desc: 'Receives and validates the message' },
@@ -12,6 +13,7 @@ const PILLARS = [
 ]
 
 export default function Architecture() {
+  useShowcaseMotion()
   return (
     <>
       <section className="sc-hero" data-anim="hero" aria-labelledby="arch-t">

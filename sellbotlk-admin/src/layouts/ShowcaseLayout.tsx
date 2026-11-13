@@ -1,9 +1,12 @@
 import { Link, NavLink, Outlet } from 'react-router-dom'
 import { MODE } from '../data'
+import { useSmoothScroll } from '../motion/core'
 import '../styles/showcase.css'
+import '../styles/motion.css'
 
 /** Presentation layout for Architecture, API and Security (top nav, centred content). */
 export function ShowcaseLayout() {
+  useSmoothScroll(true)
   return (
     <div className="showcase">
       <header className="sc-nav">
